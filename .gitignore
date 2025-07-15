@@ -1,0 +1,33 @@
+# Python byte‑compiled & caches
+**/__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual envs
+venv/
+env/
+.venv/
+
+# VS Code settings
+.vscode/
+
+# Data, checkpoints & logs
+data/
+*.pth
+*.pt
+*.ckpt
+*.h5
+*.log
+*.csv
+
+# Misc IDE files
+.idea/
+*.sublime-*
+
+# Test/type‑check caches
+.pytest_cache/
+.mypy_cache/
+
+# OS metadata
+.DS_Store
+Thumbs.db
