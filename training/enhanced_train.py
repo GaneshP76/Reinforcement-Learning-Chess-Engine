@@ -1,3 +1,4 @@
+# training/enhanced_train.py 
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -9,6 +10,10 @@ import csv
 from tqdm import tqdm
 import time
 
+# Import configuration and monitoring
+from config import ChessDQNConfig
+from utils.system_monitor import SystemMonitor
+
 # Import our enhanced components
 from agents.enhanced_dqn_agent import EnhancedDQNModel, ChessEvaluator, EnhancedDQNAgent
 from training.training_components import OpeningBook, PrioritizedReplayBuffer, ContinuousLearner, AdaptiveTraining, GameAnalyzer, ModelEvaluator
@@ -18,9 +23,31 @@ from utils import move_encoder
 class EnhancedChessTrainer:
     """Enhanced trainer with continuous learning capabilities"""
     
-    def __init__(self):
+    def __init__(self, config=None):
+        # Use provided config or create default
+        self.config = config or ChessDQNConfig()
+        
+        # Initialize system monitoring
+        self.monitor = SystemMonitor(self.config.DATA_DIR)
+        
+        # Create necessary directories
+        self.config.create_directories()
+        
+        # Print configuration summary
+        self.config.print_config_summary()
+        
+        # Check initial system health
+        print("\n🔍 Initial system check...")
+        initial_health = self.monitor.print_resource_summary()
+        if not initial_health['healthy']:
+            print("⚠️ System resources are limited. Consider:")
+            print("   • Closing other programs")
+            print("   • Reducing BATCH_SIZE in config.py")
+        
+        input("Press Enter to continue with training, or Ctrl+C to abort...")
+        
         # Setup device
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.device = self.config.DEVICE
         print(f"🚀 Enhanced Chess DQN Trainer initialized on {self.device}")
         
         # Initialize models
@@ -31,96 +58,156 @@ class EnhancedChessTrainer:
         # Initialize components
         self.evaluator = ChessEvaluator()
         self.opening_book = OpeningBook()
-        self.replay_buffer = PrioritizedReplayBuffer()
+        self.replay_buffer = PrioritizedReplayBuffer(capacity=self.config.MAX_REPLAY_BUFFER)
         self.adaptive_training = AdaptiveTraining()
         self.game_analyzer = GameAnalyzer()
         self.model_evaluator = ModelEvaluator()
         
-        # Training parameters
-        self.learning_rate = 1e-4
+        # Training parameters from config
+        self.learning_rate = self.config.LEARNING_RATE
         self.optimizer = optim.Adam(self.model.parameters(), lr=self.learning_rate)
         self.criterion = nn.MSELoss()
         
         # Initialize continuous learner
         self.continuous_learner = ContinuousLearner(self.model, self.optimizer, self.device)
         
-        # Training hyperparameters
-        self.gamma = 0.99
-        self.epsilon = 1.0
-        self.epsilon_decay = 0.995
-        self.epsilon_min = 0.05
-        self.batch_size = 32
-        self.target_update_freq = 10
+        # Training hyperparameters from config
+        self.gamma = self.config.GAMMA
+        self.epsilon = self.config.EPSILON_START
+        self.epsilon_decay = self.config.EPSILON_DECAY
+        self.epsilon_min = self.config.EPSILON_END
+        self.batch_size = self.config.BATCH_SIZE
+        self.target_update_freq = self.config.TARGET_UPDATE_FREQ
         
-        # Paths
-        self.checkpoint_path = "data/enhanced_dqn_checkpoint.pth"
-        self.reward_log_path = "data/enhanced_reward_log.csv"
+        # Paths from config
+        self.checkpoint_path = self.config.CHECKPOINT_PATH
+        self.reward_log_path = self.config.LOG_PATH
         
         # Load existing progress
         self.load_checkpoint()
         self.opening_book.load_openings()
         
         print("✅ All components initialized successfully!")
+        print(f"🧠 Model parameters: {sum(p.numel() for p in self.model.parameters()):,}")
     
-    def train(self, episodes=3000, save_freq=50, eval_freq=200):
+    def train(self, episodes=None, save_freq=None, eval_freq=None):
         """Main training loop with all enhancements"""
-        print(f"🎯 Starting enhanced training for {episodes} episodes")
-        print(f"📊 Current model parameters: {sum(p.numel() for p in self.model.parameters()):,}")
+        # Use config values if not specified
+        episodes = episodes or self.config.EPISODES
+        save_freq = save_freq or self.config.SAVE_FREQUENCY
+        eval_freq = eval_freq or self.config.EVAL_FREQUENCY
+        
+        print(f"\n🎯 Starting enhanced training for {episodes} episodes")
         
         start_episode = self.load_episode_number()
         best_win_rate = 0.0
         
-        # Training loop with progress bar
-        for episode in tqdm(range(start_episode, episodes), desc="Training Progress"):
-            # Play one training episode
-            episode_reward, game_moves, game_result = self._play_training_episode(episode)
-            
-            # Learn from the episode
-            self._learn_from_episode()
-            
-            # Analyze the game
-            self.game_analyzer.analyze_game(game_moves, game_result, chess.WHITE)
-            
-            # Update target network
-            if episode % self.target_update_freq == 0:
-                self.target_model.load_state_dict(self.model.state_dict())
-            
-            # Save progress
-            if episode % save_freq == 0:
-                self.save_checkpoint(episode)
-                self.opening_book.save_openings()
-                
-            # Evaluate model
-            if episode % eval_freq == 0 and episode > 0:
-                win_rate = self.model_evaluator.evaluate_vs_random(
-                    EnhancedDQNAgent(self.checkpoint_path), num_games=100
-                )
-                
-                # Adjust training difficulty
-                self.adaptive_training.adjust_difficulty(win_rate)
-                
-                # Save best model
-                if win_rate > best_win_rate:
-                    best_win_rate = win_rate
-                    self.save_best_model()
-                    print(f"🌟 New best model! Win rate: {win_rate:.1%}")
-                
-                # Estimate rating
-                estimated_rating = self.model_evaluator.estimate_rating(win_rate)
-                
-                # Log progress
-                self._log_progress(episode, episode_reward, win_rate, estimated_rating)
-            
-            # Update exploration
-            self.epsilon = max(self.epsilon_min, self.epsilon * self.epsilon_decay)
-            
-            # Print periodic updates
-            if episode % 50 == 0:
-                focus = self.game_analyzer.get_training_focus()
-                print(f"Episode {episode}: Reward={episode_reward:.2f}, ε={self.epsilon:.3f}, Focus={focus}")
+        # Estimate training time
+        time_estimate = self.config.estimate_training_time()
+        print(f"⏰ Estimated completion: {time_estimate['total_hours']} hours")
+        print("💡 You can stop training anytime with Ctrl+C - progress will be saved!")
+        print("🎮 Open another terminal and run 'python gui/gui_app.py' to test your AI!")
         
-        print("🎉 Training completed!")
-        self._print_final_summary()
+        try:
+            # Training loop with progress bar
+            for episode in tqdm(range(start_episode, episodes), desc="🧠 Training Chess AI"):
+                # System health check every 100 episodes
+                if episode % 100 == 0 and episode > 0:
+                    health = self.monitor.check_system_health()
+                    if not health['healthy']:
+                        print(f"\n⚠️ System resources getting low at episode {episode}!")
+                        self.monitor.print_resource_summary()
+                        
+                        # Auto-cleanup if needed
+                        if health['free_space_gb'] < 3:
+                            print("🧹 Auto-cleaning old files...")
+                            self.monitor.cleanup_old_files(keep_latest=3)
+                        
+                        response = input("Continue training? (y/n/s=show resources): ").lower()
+                        if response == 's':
+                            self.monitor.print_resource_summary()
+                            response = input("Continue? (y/n): ").lower()
+                        if response != 'y':
+                            print("💾 Saving progress and exiting...")
+                            self.save_checkpoint(episode)
+                            return
+                
+                # Play one training episode
+                episode_reward, game_moves, game_result = self._play_training_episode(episode)
+                
+                # Learn from the episode
+                self._learn_from_episode()
+                
+                # Analyze the game
+                self.game_analyzer.analyze_game(game_moves, game_result, chess.WHITE)
+                
+                # Update target network
+                if episode % self.target_update_freq == 0:
+                    self.target_model.load_state_dict(self.model.state_dict())
+                
+                # Save progress
+                if episode % save_freq == 0 and episode > 0:
+                    self.save_checkpoint(episode)
+                    self.opening_book.save_openings()
+                    
+                    # Show system status periodically
+                    if episode % (save_freq * 2) == 0:  # Every other save
+                        print(f"\n📊 Episode {episode} Status:")
+                        self.monitor.print_resource_summary()
+                        print()
+                
+                # Evaluate model
+                if episode % eval_freq == 0 and episode > 0:
+                    print(f"\n🎯 Evaluating model at episode {episode}...")
+                    win_rate = self.model_evaluator.evaluate_vs_random(
+                        EnhancedDQNAgent(self.checkpoint_path), num_games=100
+                    )
+                    
+                    # Adjust training difficulty
+                    self.adaptive_training.adjust_difficulty(win_rate)
+                    
+                    # Save best model
+                    if win_rate > best_win_rate:
+                        best_win_rate = win_rate
+                        self.save_best_model()
+                        print(f"🌟 New best model! Win rate: {win_rate:.1%}")
+                    
+                    # Estimate rating
+                    estimated_rating = self.model_evaluator.estimate_rating(win_rate)
+                    
+                    # Log progress
+                    self._log_progress(episode, episode_reward, win_rate, estimated_rating)
+                    print()  # Add spacing
+                
+                # Update exploration
+                self.epsilon = max(self.epsilon_min, self.epsilon * self.epsilon_decay)
+                
+                # Print periodic updates
+                if episode % self.config.PRINT_FREQUENCY == 0 and episode > 0:
+                    focus = self.game_analyzer.get_training_focus()
+                    storage_gb = self.monitor.get_training_storage_growth()
+                    print(f"\n📈 Episode {episode}: Reward={episode_reward:.2f}, ε={self.epsilon:.3f}, Focus={focus}, Storage=+{storage_gb:.1f}GB")
+            
+            print("🎉 Training completed successfully!")
+            
+        except KeyboardInterrupt:
+            print(f"\n⏸️ Training interrupted at episode {episode}")
+            print("💾 Saving progress...")
+            self.save_checkpoint(episode)
+            self.opening_book.save_openings()
+            print("✅ Progress saved! Run the same command to resume.")
+            return
+            
+        except Exception as e:
+            print(f"\n❌ Training error: {e}")
+            print("💾 Saving emergency checkpoint...")
+            current_episode = episode if 'episode' in locals() else start_episode
+            self.save_checkpoint(current_episode)
+            import traceback
+            traceback.print_exc()
+            return
+        
+        self._print_final_summary(best_win_rate)
     
     def _play_training_episode(self, episode):
         """Play one training episode with all enhancements"""
@@ -130,7 +217,7 @@ class EnhancedChessTrainer:
         episode_experiences = []
         
         move_count = 0
-        max_moves = 200  # Prevent infinite games
+        max_moves = self.config.MAX_GAME_LENGTH
         
         while not board.is_game_over() and move_count < max_moves:
             # Get current state
@@ -382,8 +469,25 @@ class EnhancedChessTrainer:
             'optimizer_state_dict': self.optimizer.state_dict(),
             'epsilon': self.epsilon,
             'replay_buffer': self.replay_buffer,
-            'adaptive_training': self.adaptive_training
+            'adaptive_training': self.adaptive_training,
+            'game_analyzer': self.game_analyzer,
+            'training_config': {
+                'batch_size': self.batch_size,
+                'learning_rate': self.learning_rate,
+                'gamma': self.gamma
+            }
         }, self.checkpoint_path)
+        
+        # Create backup every 500 episodes
+        if episode % 500 == 0:
+            backup_path = f"data/backups/backup_{episode}.pth"
+            os.makedirs(os.path.dirname(backup_path), exist_ok=True)
+            torch.save({
+                'episode': episode,
+                'model_state_dict': self.model.state_dict(),
+                'epsilon': self.epsilon
+            }, backup_path)
+            print(f"💾 Backup created: {backup_path}")
         
         print(f"💾 Checkpoint saved at episode {episode}")
     
@@ -397,10 +501,22 @@ class EnhancedChessTrainer:
                 self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
                 self.epsilon = checkpoint.get('epsilon', 0.1)
                 
-                print(f"✅ Loaded checkpoint from episode {checkpoint.get('episode', 0)}")
-                return checkpoint.get('episode', 0)
+                # Load additional components if available
+                if 'replay_buffer' in checkpoint:
+                    self.replay_buffer = checkpoint['replay_buffer']
+                if 'adaptive_training' in checkpoint:
+                    self.adaptive_training = checkpoint['adaptive_training']
+                if 'game_analyzer' in checkpoint:
+                    self.game_analyzer = checkpoint['game_analyzer']
+                
+                episode = checkpoint.get('episode', 0)
+                print(f"✅ Loaded checkpoint from episode {episode}")
+                return episode
             except Exception as e:
                 print(f"⚠️ Could not load checkpoint: {e}")
+                print("🆕 Starting fresh training...")
+        else:
+            print("🆕 No existing checkpoint found. Starting fresh.")
         
         return 0
     
@@ -417,10 +533,13 @@ class EnhancedChessTrainer:
     def save_best_model(self):
         """Save the best performing model"""
         best_path = "data/best_enhanced_model.pth"
+        os.makedirs(os.path.dirname(best_path), exist_ok=True)
         torch.save({
             'model_state_dict': self.model.state_dict(),
-            'epsilon': self.epsilon
+            'epsilon': self.epsilon,
+            'timestamp': time.time()
         }, best_path)
+        print(f"🌟 Best model saved to {best_path}")
     
     def _log_progress(self, episode, reward, win_rate, rating):
         """Log training progress"""
@@ -430,50 +549,126 @@ class EnhancedChessTrainer:
         with open(self.reward_log_path, 'a', newline='') as f:
             writer = csv.writer(f)
             if write_header:
-                writer.writerow(['episode', 'reward', 'epsilon', 'win_rate', 'estimated_rating'])
-            writer.writerow([episode, reward, self.epsilon, win_rate, rating])
+                writer.writerow(['episode', 'reward', 'epsilon', 'win_rate', 'estimated_rating', 'timestamp'])
+            writer.writerow([episode, reward, self.epsilon, win_rate, rating, time.time()])
+        
+        print(f"📈 Episode {episode}: Win Rate={win_rate:.1%}, Rating≈{rating}, ε={self.epsilon:.3f}")
     
-    def _print_final_summary(self):
+    def _print_final_summary(self, best_win_rate):
         """Print final training summary"""
         print("\n" + "="*60)
         print("🎉 ENHANCED TRAINING COMPLETED!")
         print("="*60)
         
+        # Show final system state
+        print("\n📊 Final System State:")
+        final_health = self.monitor.print_resource_summary()
+        
+        # Show training growth
+        storage_growth = self.monitor.get_training_storage_growth()
+        print(f"\n📈 Training Statistics:")
+        print(f"   💾 Total storage used: {storage_growth:.1f}GB")
+        print(f"   🏆 Best win rate achieved: {best_win_rate:.1%}")
+        
+        # Estimate final rating
+        if best_win_rate > 0:
+            final_rating = self.model_evaluator.estimate_rating(best_win_rate)
+            print(f"   🎯 Estimated final rating: ~{final_rating}")
+        
         # Print game analysis
+        print(f"\n🔍 Game Analysis:")
         self.game_analyzer.print_analysis_summary()
         
         # Print improvement suggestions
         suggestions = self.model_evaluator.get_improvement_suggestions()
-        print("\n💡 Improvement Suggestions:")
+        print("\n💡 Next Steps:")
         for suggestion in suggestions:
             print(f"   • {suggestion}")
         
-        print(f"\n📁 Model saved to: {self.checkpoint_path}")
-        print(f"📊 Training logs: {self.reward_log_path}")
-        print("\n🚀 Your enhanced chess AI is ready!")
+        print(f"\n📁 Files created:")
+        print(f"   🧠 Main model: {self.checkpoint_path}")
+        print(f"   🌟 Best model: data/best_enhanced_model.pth")
+        print(f"   📊 Training logs: {self.reward_log_path}")
+        print(f"   📚 Opening book: data/learned_openings.pkl")
+        
+        print(f"\n🚀 Your enhanced chess AI is ready!")
+        print(f"🎮 Play against it: python gui/gui_app.py")
+        print(f"📈 View training graphs: python evaluate/plot_rewards.py")
 
 def main():
-    """Main training function"""
+    """Main training function with noob-friendly interface"""
     print("🎯 Enhanced Chess DQN Training")
     print("="*50)
+    print("This will train a neural network to play chess!")
+    print("Your RTX 2060 should handle this perfectly. 🚀")
+    
+    # Let user choose training intensity
+    print("\nChoose training intensity:")
+    print("1. 🧪 Test Run (200 episodes, ~30 min) - RECOMMENDED FIRST!")
+    print("2. 🎯 Quick Training (1000 episodes, ~1.5 hours)")
+    print("3. 🚀 Standard Training (3000 episodes, ~4 hours)")
+    print("4. 💪 Intensive Training (5000 episodes, ~6 hours)")
+    print("5. 🎓 Marathon Training (10000 episodes, ~12 hours)")
+    print("6. 🔧 Custom (you choose)")
+    
+    try:
+        choice = input("\nEnter your choice (1-6): ").strip()
+        
+        # Create config based on choice
+        config = ChessDQNConfig()
+        
+        if choice == "1":
+            config.EPISODES = 200
+            print("🧪 Test run selected! Perfect for first-time setup.")
+        elif choice == "2":
+            config.EPISODES = 1000
+            print("🎯 Quick training selected!")
+        elif choice == "3":
+            config.EPISODES = 3000
+            print("🚀 Standard training selected!")
+        elif choice == "4":
+            config.EPISODES = 5000
+            print("💪 Intensive training selected!")
+        elif choice == "5":
+            config.EPISODES = 10000
+            print("🎓 Marathon training selected! This will take a while...")
+        elif choice == "6":
+            episodes = int(input("Enter number of episodes: "))
+            config.EPISODES = episodes
+            print(f"🔧 Custom training: {episodes} episodes")
+        else:
+            print("Invalid choice, using test run (200 episodes)")
+            config.EPISODES = 200
+        
+    except (ValueError, KeyboardInterrupt):
+        print("Using default: test run (200 episodes)")
+        config = ChessDQNConfig()
+        config.EPISODES = 200
+    
+    print(f"\n🎯 Training will run for {config.EPISODES} episodes")
+    print("💡 Tips:")
+    print("   • You can stop anytime with Ctrl+C (progress is saved!)")
+    print("   • Open another terminal and run 'python gui/gui_app.py' to test your AI")
+    print("   • Check the 'data/' folder for checkpoints and logs")
     
     # Initialize trainer
-    trainer = EnhancedChessTrainer()
+    trainer = EnhancedChessTrainer(config)
     
     # Enable human learning
     trainer.enable_human_learning()
     
     # Start training
     try:
-        trainer.train(episodes=3000, save_freq=50, eval_freq=200)
+        trainer.train()
+        print("\n✅ Training completed successfully!")
+        print("🎮 Now run: python gui/gui_app.py")
     except KeyboardInterrupt:
         print("\n⏸️ Training interrupted by user")
-        trainer.save_checkpoint(trainer.load_episode_number())
-        print("💾 Progress saved!")
+        print("✅ Progress has been saved! Run the same command to resume.")
     except Exception as e:
         print(f"\n❌ Training error: {e}")
-        trainer.save_checkpoint(trainer.load_episode_number())
-        print("💾 Progress saved before exit!")
+        print("💾 Emergency save completed!")
+        print("🔧 Try reducing BATCH_SIZE in config.py if you got memory errors")
 
 if __name__ == "__main__":
     main()
