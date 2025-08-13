@@ -149,15 +149,15 @@ class SystemMonitor:
         print(f"🧹 Cleaned {len(files_to_delete)} old files, freed {deleted_gb:.1f}GB")
         return deleted_gb
 
-# Usage in training loop:
-def add_monitoring_to_trainer():
+# Example usage in training loop:
+def add_monitoring_to_trainer(total_episodes=1000):
     """Example of how to integrate monitoring into your trainer"""
     
     monitor = SystemMonitor()
     
-    # In your training loop:
-    for episode in range(episodes):
-        # ... training code ...
+    # Example training loop with monitoring
+    for episode in range(total_episodes):
+        # ... your training code would go here ...
         
         # Check system every 100 episodes
         if episode % 100 == 0:
@@ -170,6 +170,8 @@ def add_monitoring_to_trainer():
             # Pause if system is struggling
             if not health['healthy']:
                 input("⚠️ System resources low. Press Enter to continue or Ctrl+C to stop...")
+                
+    print(f"✅ Example training completed for {total_episodes} episodes")
 
 if __name__ == "__main__":
     # Test monitoring
