@@ -197,7 +197,7 @@ class ContinuousLearner:
         self.device = device
         self.game_database = []
         self.learning_rate_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            optimizer, mode='max', patience=50, factor=0.5, verbose=True
+            optimizer, mode='min', patience=50, factor=0.5
         )
         
     def learn_from_human_game(self, moves, result, human_rating=1500):
