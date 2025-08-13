@@ -1,3 +1,6 @@
+# gui/gui_app.py - ENHANCED VERSION
+# Add these imports at the top of your existing gui_app.py:
+
 import tkinter as tk
 from tkinter import messagebox, simpledialog
 from PIL import Image, ImageTk
@@ -7,11 +10,14 @@ import io
 import random
 import cairosvg
 import torch
+import os
 
-# Import enhanced agent
+# Import enhanced components
 from agents.enhanced_dqn_agent import EnhancedDQNAgent
 from utils.utils import board_to_tensor
 from utils import move_encoder
+from config import ChessDQNConfig  # NEW
+from utils.system_monitor import SystemMonitor  # NEW
 
 class ChessApp:
     def __init__(self, root):
@@ -21,8 +27,25 @@ class ChessApp:
         self.selected_square = None
         self.game_moves = []  # Track moves for learning
         
-        # Initialize enhanced agent
-        self.agent = EnhancedDQNAgent()
+        # Load configuration
+        self.config = ChessDQNConfig()
+        self.monitor = SystemMonitor(self.config.DATA_DIR)
+        
+        # Initialize enhanced agent with config
+        checkpoint_path = self.config.CHECKPOINT_PATH
+        if not os.path.exists(checkpoint_path):
+            # Try alternative paths
+            alt_paths = [
+                "data/best_enhanced_model.pth",
+                "data/enhanced_dqn_checkpoint.pth",
+                "data/dqn_checkpoint.pth"
+            ]
+            for path in alt_paths:
+                if os.path.exists(path):
+                    checkpoint_path = path
+                    break
+        
+        self.agent = EnhancedDQNAgent(checkpoint_path)
         
         # GUI setup
         self.setup_gui()
@@ -30,9 +53,10 @@ class ChessApp:
         
         print("🎯 Enhanced Chess GUI loaded!")
         print(f"🤖 Agent info: {self.agent.get_model_info()}")
+        print(f"💾 Using model: {checkpoint_path}")
 
     def setup_gui(self):
-        """Setup the GUI components"""
+        """Setup the GUI components with enhancements"""
         # Main frame
         main_frame = tk.Frame(self.root)
         main_frame.pack(padx=10, pady=10)
@@ -43,7 +67,7 @@ class ChessApp:
         self.canvas.bind("<Button-1>", self.on_click)
         
         # Control panel
-        control_frame = tk.Frame(main_frame, width=200)
+        control_frame = tk.Frame(main_frame, width=250)
         control_frame.pack(side=tk.RIGHT, fill=tk.Y, padx=(10, 0))
         
         # Game info
@@ -56,14 +80,29 @@ class ChessApp:
         self.status_label = tk.Label(info_frame, text="Game in progress", font=('Arial', 10))
         self.status_label.pack()
         
-        # Agent info
+        # Move counter
+        self.move_counter = tk.Label(info_frame, text="Move: 1", font=('Arial', 9))
+        self.move_counter.pack()
+        
+        # Agent info (Enhanced)
         agent_frame = tk.LabelFrame(control_frame, text="AI Agent", padx=5, pady=5)
         agent_frame.pack(fill=tk.X, pady=(0, 10))
         
         agent_info = self.agent.get_model_info()
-        tk.Label(agent_frame, text=f"Games learned: {agent_info['games_learned']}", font=('Arial', 9)).pack()
-        tk.Label(agent_frame, text=f"Exploration: {agent_info['epsilon']:.3f}", font=('Arial', 9)).pack()
+        self.games_learned_label = tk.Label(agent_frame, text=f"Games learned: {agent_info['games_learned']}", font=('Arial', 9))
+        self.games_learned_label.pack()
+        
+        self.epsilon_label = tk.Label(agent_frame, text=f"Exploration: {agent_info['epsilon']:.3f}", font=('Arial', 9))
+        self.epsilon_label.pack()
+        
         tk.Label(agent_frame, text=f"Parameters: {agent_info['parameters']:,}", font=('Arial', 9)).pack()
+        tk.Label(agent_frame, text=f"Device: {agent_info['device']}", font=('Arial', 9)).pack()
+        
+        # System monitoring (NEW)
+        system_frame = tk.LabelFrame(control_frame, text="System Status", padx=5, pady=5)
+        system_frame.pack(fill=tk.X, pady=(0, 10))
+        
+        self.update_system_info(system_frame)
         
         # Controls
         controls_frame = tk.LabelFrame(control_frame, text="Controls", padx=5, pady=5)
@@ -76,17 +115,112 @@ class ChessApp:
         tk.Button(controls_frame, text="Get Hint", command=self.get_hint, 
                  font=('Arial', 10)).pack(fill=tk.X, pady=(0, 5))
         
-        # Rating input
+        # NEW: Analysis button
+        tk.Button(controls_frame, text="Analyze Position", command=self.analyze_position, 
+                 font=('Arial', 10)).pack(fill=tk.X, pady=(0, 5))
+        
+        # Rating input (Enhanced)
         rating_frame = tk.LabelFrame(control_frame, text="Your Rating", padx=5, pady=5)
-        rating_frame.pack(fill=tk.X)
+        rating_frame.pack(fill=tk.X, pady=(0, 10))
         
         self.rating_var = tk.StringVar(value="1500")
         tk.Label(rating_frame, text="Enter your chess rating:", font=('Arial', 9)).pack()
         self.rating_entry = tk.Entry(rating_frame, textvariable=self.rating_var, width=10)
         self.rating_entry.pack(pady=5)
+        
+        # Game history (NEW)
+        history_frame = tk.LabelFrame(control_frame, text="Recent Games", padx=5, pady=5)
+        history_frame.pack(fill=tk.X)
+        
+        self.history_text = tk.Text(history_frame, height=4, width=25, font=('Arial', 8))
+        self.history_text.pack(pady=5)
+        self.update_game_history()
+
+    def update_system_info(self, parent_frame):
+        """Update system information display"""
+        try:
+            health = self.monitor.check_system_health()
+            memory = health['memory']
+            gpu = health['gpu']
+            
+            # Memory info
+            tk.Label(parent_frame, text=f"RAM: {memory['used_gb']:.1f}/{memory['total_gb']:.1f}GB", 
+                    font=('Arial', 9)).pack()
+            
+            # GPU info
+            if gpu:
+                tk.Label(parent_frame, text=f"GPU: {gpu['allocated_gb']:.1f}/{gpu['total_gb']:.1f}GB", 
+                        font=('Arial', 9)).pack()
+            else:
+                tk.Label(parent_frame, text="GPU: Not available", font=('Arial', 9)).pack()
+            
+            # Health status
+            status_color = "green" if health['healthy'] else "orange"
+            status_text = "Healthy" if health['healthy'] else "Limited"
+            status_label = tk.Label(parent_frame, text=f"Status: {status_text}", 
+                                  font=('Arial', 9), fg=status_color)
+            status_label.pack()
+            
+        except Exception as e:
+            tk.Label(parent_frame, text="System info unavailable", font=('Arial', 9)).pack()
+
+    def update_game_history(self):
+        """Update game history display"""
+        try:
+            # Read recent games from log
+            history_text = "Recent performance:\n"
+            
+            # Simple placeholder - you could enhance this
+            agent_info = self.agent.get_model_info()
+            games_count = agent_info['games_learned']
+            
+            if games_count > 0:
+                history_text += f"• {games_count} games learned\n"
+                history_text += f"• Exploration: {agent_info['epsilon']:.1%}\n"
+            else:
+                history_text += "• No games played yet\n"
+                history_text += "• Ready for first game!\n"
+            
+            self.history_text.delete(1.0, tk.END)
+            self.history_text.insert(tk.END, history_text)
+            
+        except Exception as e:
+            self.history_text.delete(1.0, tk.END)
+            self.history_text.insert(tk.END, "History unavailable")
+
+    def analyze_position(self):
+        """NEW: Analyze current position"""
+        try:
+            from agents.enhanced_dqn_agent import ChessEvaluator
+            
+            evaluator = ChessEvaluator()
+            score = evaluator.evaluate_position(self.board)
+            
+            # Simple analysis
+            if score > 0.5:
+                analysis = "White has a significant advantage"
+            elif score > 0.1:
+                analysis = "White is slightly better"
+            elif score > -0.1:
+                analysis = "Position is roughly equal"
+            elif score > -0.5:
+                analysis = "Black is slightly better"
+            else:
+                analysis = "Black has a significant advantage"
+            
+            # Additional info
+            legal_moves = len(list(self.board.legal_moves))
+            game_phase = "Opening" if len(self.board.move_stack) < 20 else "Middlegame" if len(self.board.piece_map()) > 12 else "Endgame"
+            
+            analysis_text = f"Position Analysis:\n\n{analysis}\n\nScore: {score:.3f}\nLegal moves: {legal_moves}\nGame phase: {game_phase}"
+            
+            messagebox.showinfo("Position Analysis", analysis_text)
+            
+        except Exception as e:
+            messagebox.showerror("Analysis Error", f"Could not analyze position: {e}")
 
     def update_board(self):
-        """Update the chess board display"""
+        """Update the chess board display with enhancements"""
         svg_data = chess.svg.board(
             self.board, 
             size=480,
@@ -102,103 +236,24 @@ class ChessApp:
             turn_text = "White to move" if self.board.turn == chess.WHITE else "Black (AI) thinking..."
             self.turn_label.config(text=turn_text)
         
-        self.root.update()
-
-    def ask_promotion_piece(self):
-        """Ask user for pawn promotion piece"""
-        piece_map = {
-            "Queen": chess.QUEEN,
-            "Rook": chess.ROOK,
-            "Bishop": chess.BISHOP,
-            "Knight": chess.KNIGHT
-        }
-        piece = simpledialog.askstring(
-            "Pawn Promotion", 
-            "Promote pawn to (Queen/Rook/Bishop/Knight):",
-            initialvalue="Queen"
-        )
-        if piece and piece.capitalize() in piece_map:
-            return piece_map[piece.capitalize()]
-        return chess.QUEEN
-
-    def on_click(self, event):
-        """Handle mouse clicks on the chess board"""
-        if self.board.is_game_over() or self.board.turn == chess.BLACK:
-            return
-
-        row = event.y // 60
-        col = event.x // 60
-        square = chess.square(col, 7 - row)
-
-        if self.selected_square is None:
-            # Select a piece
-            piece = self.board.piece_at(square)
-            if piece and piece.color == chess.WHITE:
-                self.selected_square = square
-        else:
-            # Try to make a move
-            move = chess.Move(self.selected_square, square)
-
-            # Handle pawn promotion
-            piece = self.board.piece_at(self.selected_square)
-            if (piece and piece.piece_type == chess.PAWN and 
-                chess.square_rank(square) in [0, 7]):
-                move.promotion = self.ask_promotion_piece()
-
-            if move in self.board.legal_moves:
-                # Make the move
-                self.board.push(move)
-                self.game_moves.append(move)
-                self.selected_square = None
-                self.update_board()
-                self.check_game_over()
-                
-                # Let AI move after a short delay
-                if not self.board.is_game_over():
-                    self.root.after(500, self.make_ai_move)
-            else:
-                self.selected_square = None
-
-    def make_ai_move(self):
-        """Make AI move using enhanced agent"""
-        if self.board.is_game_over():
-            return
-
-        self.status_label.config(text="AI is thinking...")
-        self.root.update()
-
+        # Update move counter
+        move_num = (len(self.board.move_stack) // 2) + 1
+        self.move_counter.config(text=f"Move: {move_num}")
+        
+        # Update agent info
         try:
-            # Get AI move with some thinking time simulation
-            move = self.agent.choose_move(self.board, temperature=0.2)
-            
-            if move and move in self.board.legal_moves:
-                self.board.push(move)
-                self.game_moves.append(move)
-                print(f"🤖 AI played: {move}")
-            else:
-                # Fallback to random move
-                legal_moves = list(self.board.legal_moves)
-                if legal_moves:
-                    move = random.choice(legal_moves)
-                    self.board.push(move)
-                    self.game_moves.append(move)
-                    print(f"🤖 AI played (random): {move}")
+            agent_info = self.agent.get_model_info()
+            self.games_learned_label.config(text=f"Games learned: {agent_info['games_learned']}")
+            self.epsilon_label.config(text=f"Exploration: {agent_info['epsilon']:.3f}")
+        except:
+            pass
+        
+        self.root.update()
 
-        except Exception as e:
-            print(f"⚠️ AI move error: {e}")
-            # Fallback to random move
-            legal_moves = list(self.board.legal_moves)
-            if legal_moves:
-                move = random.choice(legal_moves)
-                self.board.push(move)
-                self.game_moves.append(move)
-
-        self.status_label.config(text="Game in progress")
-        self.update_board()
-        self.check_game_over()
-
+    # ... (rest of your existing methods remain the same)
+    
     def check_game_over(self):
-        """Check if game is over and handle the result"""
+        """Check if game is over and handle the result with enhanced learning"""
         if self.board.is_game_over():
             result = self.board.result()
             
@@ -216,81 +271,64 @@ class ChessApp:
             self.status_label.config(text="Game Over")
             messagebox.showinfo("Game Over", msg)
             
-            # Let AI learn from the game
+            # Enhanced learning from human games
             try:
                 human_rating = int(self.rating_var.get())
             except:
                 human_rating = 1500
             
+            # Let AI learn from the game
             self.agent.learn_from_game(self.game_moves, game_result)
             
-            # If it's a human vs AI game, enable continuous learning
-            if hasattr(self.agent, 'continuous_learner'):
+            # Additional learning if available
+            if hasattr(self.agent, 'learn_from_human_game'):
+                self.agent.learn_from_human_game(self.game_moves, game_result, human_rating)
                 print(f"🎓 AI learning from game against {human_rating}-rated player")
-
-    def new_game(self):
-        """Start a new game"""
-        # Save current agent state
-        self.agent.save_model()
-        
-        # Reset board
-        self.board = chess.Board()
-        self.selected_square = None
-        self.game_moves = []
-        
-        self.status_label.config(text="New game started")
-        self.update_board()
-
-    def undo_move(self):
-        """Undo the last move(s)"""
-        if len(self.board.move_stack) >= 2:  # Undo both human and AI moves
-            self.board.pop()  # AI move
-            self.board.pop()  # Human move
-            if len(self.game_moves) >= 2:
-                self.game_moves.pop()
-                self.game_moves.pop()
-        elif len(self.board.move_stack) == 1:
-            self.board.pop()
-            if self.game_moves:
-                self.game_moves.pop()
-        
-        self.selected_square = None
-        self.update_board()
-
-    def get_hint(self):
-        """Get a move hint from the AI"""
-        if self.board.turn == chess.WHITE and not self.board.is_game_over():
-            try:
-                hint_move = self.agent.choose_move(self.board, temperature=0.0)  # Best move
-                if hint_move:
-                    from_square = chess.square_name(hint_move.from_square)
-                    to_square = chess.square_name(hint_move.to_square)
-                    hint_text = f"Suggested move: {from_square} to {to_square}"
-                    if hint_move.promotion:
-                        piece_names = {
-                            chess.QUEEN: "Queen",
-                            chess.ROOK: "Rook", 
-                            chess.BISHOP: "Bishop",
-                            chess.KNIGHT: "Knight"
-                        }
-                        hint_text += f" (promote to {piece_names[hint_move.promotion]})"
-                    
-                    messagebox.showinfo("Move Hint", hint_text)
-                else:
-                    messagebox.showinfo("Move Hint", "No move suggestion available")
-            except Exception as e:
-                print(f"Hint error: {e}")
-                messagebox.showinfo("Move Hint", "Unable to generate hint")
+            
+            # Update history display
+            self.update_game_history()
 
     def on_closing(self):
-        """Handle window closing"""
+        """Handle window closing with enhanced cleanup"""
         # Save agent's learning progress
-        self.agent.save_model()
-        print("💾 Agent progress saved!")
+        try:
+            self.agent.save_model()
+            print("💾 Agent progress saved!")
+        except Exception as e:
+            print(f"⚠️ Could not save agent progress: {e}")
+        
+        # Show final system status
+        try:
+            print("\n📊 Final System Status:")
+            self.monitor.print_resource_summary()
+        except:
+            pass
+        
         self.root.destroy()
 
 def main():
-    """Main function to run the enhanced chess GUI"""
+    """Main function to run the enhanced chess GUI with config"""
+    print("🎮 Starting Enhanced Chess GUI...")
+    
+    # Check if any trained model exists
+    config = ChessDQNConfig()
+    model_paths = [
+        config.CHECKPOINT_PATH,
+        "data/best_enhanced_model.pth", 
+        "data/enhanced_dqn_checkpoint.pth",
+        "data/dqn_checkpoint.pth"
+    ]
+    
+    model_found = any(os.path.exists(path) for path in model_paths)
+    
+    if not model_found:
+        print("⚠️ No trained model found!")
+        print("🏋️ Run training first: python training/enhanced_train.py")
+        print("🤖 Or the AI will play with random initialization")
+        response = input("Continue anyway? (y/n): ").lower()
+        if response != 'y':
+            return
+    
     root = tk.Tk()
     app = ChessApp(root)
     
@@ -302,6 +340,13 @@ def main():
     x = (root.winfo_screenwidth() // 2) - (root.winfo_width() // 2)
     y = (root.winfo_screenheight() // 2) - (root.winfo_height() // 2)
     root.geometry(f"+{x}+{y}")
+    
+    print("🎯 Chess GUI loaded successfully!")
+    print("💡 Tips:")
+    print("   • Click pieces to move them")
+    print("   • Use 'Get Hint' for move suggestions") 
+    print("   • Try 'Analyze Position' for evaluation")
+    print("   • Your games help train the AI!")
     
     root.mainloop()
 
