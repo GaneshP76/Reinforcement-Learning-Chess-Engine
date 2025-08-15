@@ -1,4 +1,4 @@
-# training/enhanced_train.py - COMPLETE VERSION
+# execute with  python -m training.enhanced_train.py
 import torch
 import torch.nn as nn
 import torch.optim as optim
