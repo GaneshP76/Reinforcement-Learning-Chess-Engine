@@ -299,6 +299,11 @@ class ChessApp:
         col = event.x // 60
         row = 7 - (event.y // 60)
         
+        # CRITICAL FIX: Adjust coordinates when board is flipped for black
+        if self.player_color == chess.BLACK:
+            row = 7 - row  # Flip row
+            col = 7 - col  # Flip column
+        
         if 0 <= row <= 7 and 0 <= col <= 7:
             square = chess.square(col, row)
             
@@ -307,6 +312,7 @@ class ChessApp:
                 piece = self.board.piece_at(square)
                 if piece and piece.color == self.board.turn:
                     self.selected_square = square
+                    print(f"Selected piece at {chess.square_name(square)}: {piece}")  # Debug
             else:
                 # Make move
                 move = chess.Move(self.selected_square, square)
@@ -320,6 +326,8 @@ class ChessApp:
                         promotion_piece = self.get_promotion_piece(piece.color)
                         move.promotion = promotion_piece
                 
+                print(f"Attempting move: {move}")  # Debug
+                
                 if move in self.board.legal_moves:
                     self.board.push(move)
                     self.game_moves.append(move)
@@ -331,6 +339,8 @@ class ChessApp:
                     if not self.board.is_game_over():
                         self.root.after(500, self.ai_move)
                 else:
+                    print(f"Illegal move attempted: {move}")  # Debug
+                    print(f"Legal moves: {[str(m) for m in list(self.board.legal_moves)[:5]]}...")  # Show first 5 legal moves
                     self.selected_square = None
 
     def ai_move(self):

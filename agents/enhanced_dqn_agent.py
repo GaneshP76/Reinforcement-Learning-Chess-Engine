@@ -275,7 +275,7 @@ class ChessEvaluator:
         return score / 100.0
 
 class EnhancedDQNAgent:
-    """Enhanced DQN Agent with continuous learning capabilities and smart promotion"""
+    """Enhanced DQN Agent with FIXED promotion logic"""
     
     def __init__(self, model_path="data/enhanced_dqn_checkpoint.pth"):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -292,6 +292,15 @@ class EnhancedDQNAgent:
         self.recent_games = deque(maxlen=100)
         self.learning_enabled = True
         
+        # 👑 PROMOTION STATISTICS TRACKING
+        self.promotion_stats = {
+            'queen': 0,
+            'rook': 0,
+            'bishop': 0,
+            'knight': 0,
+            'total_promotions': 0
+        }
+        
         # Load existing model if available
         self.load_model()
         
@@ -300,88 +309,90 @@ class EnhancedDQNAgent:
     
     def choose_promotion_piece(self, board, move):
         """
-        Intelligently choose promotion piece based on position
+        🔥 COMPLETELY REWRITTEN: Now STRONGLY favors Queen promotion
+        Only underpromotes in very specific tactical situations
         """
-        # Default to Queen (90% of cases)
-        promotion_piece = chess.QUEEN
-        
-        # Analyze position for underpromotion opportunities
         to_square = move.to_square
         
-        # Check if Queen would be immediately captured
+        # 👑 DEFAULT: ALWAYS QUEEN unless there's a compelling reason not to
+        promotion_piece = chess.QUEEN
+        
+        # Test Queen promotion first
         test_board = board.copy()
-        test_move = chess.Move(move.from_square, to_square, promotion=chess.QUEEN)
-        test_board.push(test_move)
+        queen_move = chess.Move(move.from_square, to_square, promotion=chess.QUEEN)
+        test_board.push(queen_move)
         
-        # If Queen is attacked and less valuable piece isn't, consider underpromotion
-        if test_board.attackers(not board.turn, to_square):
-            # Try Knight (for tactical reasons)
-            test_board_knight = board.copy()
-            knight_move = chess.Move(move.from_square, to_square, promotion=chess.KNIGHT)
-            test_board_knight.push(knight_move)
-            
-            # Check if knight gives check
-            if test_board_knight.is_check():
-                promotion_piece = chess.KNIGHT
-                print("🐴 AI promoted to Knight for check!")
-                return promotion_piece
-            
-            # Check for knight fork
-            elif self._knight_gives_fork(test_board_knight, to_square):
-                promotion_piece = chess.KNIGHT
-                print("🐴 AI promoted to Knight for fork!")
-                return promotion_piece
-            
-            # Try Rook (for endgames)
-            elif len(test_board.piece_map()) <= 10:  # Endgame
-                promotion_piece = chess.ROOK
-                print("🏰 AI promoted to Rook for endgame!")
-                return promotion_piece
-            
-            # Check if promoting to Bishop gives a discovered check
-            test_board_bishop = board.copy()
-            bishop_move = chess.Move(move.from_square, to_square, promotion=chess.BISHOP)
-            test_board_bishop.push(bishop_move)
-            
-            if test_board_bishop.is_check():
-                promotion_piece = chess.BISHOP
-                print("♗ AI promoted to Bishop for discovered check!")
-                return promotion_piece
-        
-        # Special case: Avoid stalemate by underpromotion
-        if self._would_cause_stalemate(test_board):
-            # Try Rook first, then Knight
-            for piece in [chess.ROOK, chess.KNIGHT, chess.BISHOP]:
-                test_stalemate = board.copy()
-                test_move_stalemate = chess.Move(move.from_square, to_square, promotion=piece)
-                test_stalemate.push(test_move_stalemate)
+        # 🚫 ONLY Exception 1: Queen promotion causes immediate stalemate
+        if test_board.is_stalemate():
+            print("🚫 Queen causes stalemate! Trying alternatives...")
+            for alt_piece in [chess.ROOK, chess.BISHOP, chess.KNIGHT]:
+                test_alt = board.copy()
+                alt_move = chess.Move(move.from_square, to_square, promotion=alt_piece)
+                test_alt.push(alt_move)
                 
-                if not (test_stalemate.is_stalemate() or test_stalemate.is_insufficient_material()):
+                if not test_alt.is_stalemate() and not test_alt.is_insufficient_material():
                     piece_names = {chess.ROOK: "Rook", chess.BISHOP: "Bishop", chess.KNIGHT: "Knight"}
-                    print(f"🎯 AI promoted to {piece_names[piece]} to avoid stalemate!")
-                    return piece
+                    print(f"✅ Promoting to {piece_names[alt_piece]} to avoid stalemate!")
+                    return alt_piece
         
-        return promotion_piece
+        # 🚫 ONLY Exception 2: Very specific knight tactics (extremely rare)
+        # But only if Queen doesn't give the same benefit
+        if len(test_board.piece_map()) <= 8:  # Late endgame only
+            test_knight = board.copy()
+            knight_move = chess.Move(move.from_square, to_square, promotion=chess.KNIGHT)
+            test_knight.push(knight_move)
+            
+            # Check if knight gives unique tactical benefit
+            knight_checks = test_knight.is_check()
+            queen_checks = test_board.is_check()
+            
+            if knight_checks and not queen_checks:
+                # Knight gives check but Queen doesn't - very rare situation
+                if self._knight_gives_unique_fork(test_knight, to_square, test_board):
+                    print("🐴 Rare knight promotion for unique tactical advantage!")
+                    return chess.KNIGHT
+        
+        # 👑 95%+ of cases: Promote to Queen!
+        print("👑 Standard Queen promotion - MAXIMUM POWER!")
+        return chess.QUEEN
     
-    def _knight_gives_fork(self, board, knight_square):
-        """Check if knight on square gives a fork"""
-        valuable_targets = 0
-        knight_attacks = list(board.attacks(knight_square))
+    def _knight_gives_unique_fork(self, knight_board, knight_square, queen_board):
+        """Check if knight gives tactical advantage that Queen doesn't"""
+        # Count valuable targets attacked by knight
+        knight_targets = 0
+        knight_attacks = list(knight_board.attacks(knight_square))
         
-        for attacked_square in knight_attacks:
-            piece = board.piece_at(attacked_square)
-            if (piece and piece.color != board.turn and 
+        for square in knight_attacks:
+            piece = knight_board.piece_at(square)
+            if (piece and piece.color != knight_board.turn and 
                 piece.piece_type in [chess.KING, chess.QUEEN, chess.ROOK]):
-                valuable_targets += 1
+                knight_targets += 1
         
-        return valuable_targets >= 2
-    
-    def _would_cause_stalemate(self, board):
-        """Check if the position would be stalemate"""
-        return board.is_stalemate() or (len(list(board.legal_moves)) == 0 and not board.is_check())
+        # Count valuable targets attacked by Queen
+        queen_square = None
+        for square, piece in queen_board.piece_map().items():
+            if (piece.piece_type == chess.QUEEN and 
+                piece.color == queen_board.turn and 
+                square != knight_square):  # Find our newly promoted queen
+                queen_square = square
+                break
+        
+        if queen_square:
+            queen_targets = 0
+            queen_attacks = list(queen_board.attacks(queen_square))
+            for square in queen_attacks:
+                piece = queen_board.piece_at(square)
+                if (piece and piece.color != queen_board.turn and 
+                    piece.piece_type in [chess.KING, chess.QUEEN, chess.ROOK]):
+                    queen_targets += 1
+            
+            # Only choose knight if it attacks significantly more valuable targets
+            return knight_targets >= 2 and knight_targets > queen_targets
+        
+        return knight_targets >= 2
     
     def choose_move(self, board, temperature=1.0):
-        """Choose the best move using the enhanced model with smart promotion"""
+        """🔥 FIXED: Enhanced move choice with proper promotion handling"""
         from utils.utils import board_to_tensor
         from utils import move_encoder
         
@@ -396,29 +407,35 @@ class EnhancedDQNAgent:
             q_values, position_value = self.model(state_tensor)
             q_values = q_values[0]
         
-        # Get legal move indices with smart promotion handling
+        # 🔥 CRITICAL FIX: Proper promotion move handling
         legal_indices = []
         index_to_move = {}
         
         for move in legal_moves:
-            # Handle promotion moves intelligently
             if move.promotion is not None:
-                # For AI, choose smart promotion piece
-                smart_promotion = self.choose_promotion_piece(board, move)
-                enhanced_move = chess.Move(move.from_square, move.to_square, promotion=smart_promotion)
+                # 🔥 For each promotion square, evaluate ALL promotion types and pick BEST
+                promotion_moves = []
+                promotion_scores = []
                 
-                # Only consider if it's legal (it should be since we're replacing the promotion)
-                if enhanced_move in legal_moves:
-                    idx = move_encoder.move_to_index(enhanced_move)
+                # Test all possible promotions
+                for promo_type in [chess.QUEEN, chess.ROOK, chess.BISHOP, chess.KNIGHT]:
+                    test_promotion = chess.Move(move.from_square, move.to_square, promotion=promo_type)
+                    if test_promotion in legal_moves:  # Make sure it's legal
+                        idx = move_encoder.move_to_index(test_promotion)
+                        if idx is not None:
+                            promotion_moves.append(test_promotion)
+                            promotion_scores.append(q_values[idx].item())
+                
+                # Choose the promotion with highest Q-value (should usually be Queen)
+                if promotion_moves:
+                    best_promo_idx = promotion_scores.index(max(promotion_scores))
+                    best_promotion_move = promotion_moves[best_promo_idx]
+                    
+                    # Add to legal moves for consideration
+                    idx = move_encoder.move_to_index(best_promotion_move)
                     if idx is not None:
                         legal_indices.append(idx)
-                        index_to_move[idx] = enhanced_move
-                else:
-                    # Fallback to original move if smart promotion isn't legal
-                    idx = move_encoder.move_to_index(move)
-                    if idx is not None:
-                        legal_indices.append(idx)
-                        index_to_move[idx] = move
+                        index_to_move[idx] = best_promotion_move
             else:
                 # Regular non-promotion move
                 idx = move_encoder.move_to_index(move)
@@ -429,11 +446,10 @@ class EnhancedDQNAgent:
         if not legal_indices:
             return random.choice(legal_moves)
         
-        # Apply temperature for move selection diversity
+        # Move selection with temperature
         if temperature > 0 and random.random() < self.epsilon:
             # Exploration: weighted random selection
             legal_q_values = [q_values[i].item() for i in legal_indices]
-            # Apply temperature
             scaled_values = [v / temperature for v in legal_q_values]
             max_val = max(scaled_values)
             exp_values = [np.exp(v - max_val) for v in scaled_values]
@@ -447,12 +463,46 @@ class EnhancedDQNAgent:
         
         chosen_move = index_to_move[best_index]
         
-        # Log special moves for debugging
-        if chosen_move.promotion and chosen_move.promotion != chess.QUEEN:
-            piece_names = {chess.ROOK: "Rook", chess.BISHOP: "Bishop", chess.KNIGHT: "Knight"}
-            print(f"🎯 AI chose smart underpromotion: {piece_names[chosen_move.promotion]}")
+        # 📊 Track promotion statistics
+        if chosen_move.promotion:
+            self.promotion_stats['total_promotions'] += 1
+            if chosen_move.promotion == chess.QUEEN:
+                self.promotion_stats['queen'] += 1
+                print("👑 AI promoted to QUEEN! (As it should 95% of the time)")
+            elif chosen_move.promotion == chess.ROOK:
+                self.promotion_stats['rook'] += 1
+                print("🏰 AI promoted to Rook (rare but sometimes correct)")
+            elif chosen_move.promotion == chess.BISHOP:
+                self.promotion_stats['bishop'] += 1
+                print("♗ AI promoted to Bishop (very rare)")
+            elif chosen_move.promotion == chess.KNIGHT:
+                self.promotion_stats['knight'] += 1
+                print("🐴 AI promoted to Knight (should be extremely rare)")
+            
+            # Print promotion statistics
+            if self.promotion_stats['total_promotions'] % 5 == 0:  # Every 5 promotions
+                self._print_promotion_stats()
         
         return chosen_move
+    
+    def _print_promotion_stats(self):
+        """Print promotion statistics to track if AI is promoting correctly"""
+        total = self.promotion_stats['total_promotions']
+        if total == 0:
+            return
+        
+        print(f"\n📊 PROMOTION STATISTICS (last {total} promotions):")
+        print(f"   👑 Queen: {self.promotion_stats['queen']}/{total} ({self.promotion_stats['queen']/total*100:.1f}%) - TARGET: 90%+")
+        print(f"   🏰 Rook: {self.promotion_stats['rook']}/{total} ({self.promotion_stats['rook']/total*100:.1f}%)")
+        print(f"   ♗ Bishop: {self.promotion_stats['bishop']}/{total} ({self.promotion_stats['bishop']/total*100:.1f}%)")
+        print(f"   🐴 Knight: {self.promotion_stats['knight']}/{total} ({self.promotion_stats['knight']/total*100:.1f}%)")
+        
+        queen_rate = self.promotion_stats['queen'] / total
+        if queen_rate < 0.8:  # Less than 80% Queens is concerning
+            print("⚠️  WARNING: AI is under-promoting too often!")
+            print("💡 This suggests the evaluation function may need tuning")
+        elif queen_rate > 0.95:  # More than 95% Queens is perfect
+            print("✅ EXCELLENT: AI correctly favors Queen promotion!")
     
     def learn_from_game(self, game_moves, game_result):
         """Learn from a completed game"""
@@ -500,9 +550,15 @@ class EnhancedDQNAgent:
         torch.save({
             'model_state_dict': self.model.state_dict(),
             'epsilon': self.epsilon,
-            'recent_games': list(self.recent_games)
+            'recent_games': list(self.recent_games),
+            'promotion_stats': self.promotion_stats  # 📊 Save promotion statistics
         }, self.model_path, weights_only=False)
         print(f"💾 Enhanced model saved to {self.model_path}")
+        
+        # Print final promotion stats when saving
+        if self.promotion_stats['total_promotions'] > 0:
+            print("📊 Final Promotion Statistics:")
+            self._print_promotion_stats()
     
     def load_model(self):
         """Load existing model if available"""
@@ -512,7 +568,17 @@ class EnhancedDQNAgent:
                 self.model.load_state_dict(checkpoint['model_state_dict'])
                 self.epsilon = checkpoint.get('epsilon', 0.1)
                 self.recent_games = deque(checkpoint.get('recent_games', []), maxlen=100)
+                # Load promotion stats if available
+                self.promotion_stats = checkpoint.get('promotion_stats', {
+                    'queen': 0, 'rook': 0, 'bishop': 0, 'knight': 0, 'total_promotions': 0
+                })
                 print(f"✅ Loaded enhanced model from {self.model_path}")
+                
+                # Show promotion stats if any exist
+                if self.promotion_stats['total_promotions'] > 0:
+                    print("📊 Loaded Promotion Statistics:")
+                    self._print_promotion_stats()
+                    
             except Exception as e:
                 print(f"⚠️ Could not load model: {e}")
         else:
@@ -524,19 +590,21 @@ class EnhancedDQNAgent:
             'games_learned': len(self.recent_games),
             'epsilon': self.epsilon,
             'device': str(self.device),
-            'parameters': sum(p.numel() for p in self.model.parameters())
+            'parameters': sum(p.numel() for p in self.model.parameters()),
+            'promotion_stats': self.promotion_stats
         }
     
     def get_promotion_stats(self):
         """Get statistics about promotion choices (for analysis)"""
-        promotion_stats = {
+        return self.promotion_stats.copy()
+    
+    def reset_promotion_stats(self):
+        """Reset promotion statistics (useful for testing)"""
+        self.promotion_stats = {
             'queen': 0,
             'rook': 0,
             'bishop': 0,
             'knight': 0,
             'total_promotions': 0
         }
-        
-        # This would be implemented to track promotion statistics
-        # For now, return empty stats
-        return promotion_stats
+        print("📊 Promotion statistics reset")
