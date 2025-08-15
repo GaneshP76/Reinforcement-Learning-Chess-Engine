@@ -1,7 +1,7 @@
 import csv
 import matplotlib.pyplot as plt
 
-REWARD_LOG_PATH = "data/reward_log.csv"
+REWARD_LOG_PATH = "data/training_log.csv"
 
 episodes = []
 rewards = []
