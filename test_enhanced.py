@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+
 """
 Test script for enhanced chess DQN
 Run this to make sure everything is working correctly

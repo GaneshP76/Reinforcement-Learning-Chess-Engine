@@ -1,4 +1,4 @@
-# config.py - Central configuration for your Chess DQN
+#Central configuration for your Chess DQN
 """
 Enhanced Chess DQN Configuration
 Centralized settings for easy modification

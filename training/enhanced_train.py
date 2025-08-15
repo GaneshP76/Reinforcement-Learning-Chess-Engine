@@ -1,4 +1,4 @@
-# execute with  python -m training.enhanced_train.py
+# execute with  python -m training.enhanced_train
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -9,6 +9,10 @@ import os
 import csv
 from tqdm import tqdm
 import time
+import sys
+
+# Add the parent directory to Python path
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Import configuration and monitoring
 from config import ChessDQNConfig
