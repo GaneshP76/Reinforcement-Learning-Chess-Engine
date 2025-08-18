@@ -27,33 +27,38 @@ class PromotionDialog:
     def __init__(self, parent, color):
         self.result = chess.QUEEN  # default
         self.dialog = tk.Toplevel(parent)
-        self.dialog.title("Pawn Promotion")
-        self.dialog.geometry("300x150")
+        self.dialog.title("🎯 Pawn Promotion!")
+        self.dialog.geometry("350x180")
         self.dialog.transient(parent)
         self.dialog.grab_set()
         
         # Center the dialog
         self.dialog.geometry("+%d+%d" % (parent.winfo_rootx() + 50, parent.winfo_rooty() + 50))
         
-        tk.Label(self.dialog, text="Choose promotion piece:", font=('Arial', 12)).pack(pady=10)
+        tk.Label(self.dialog, text="🎉 Your pawn reached the end!", font=('Arial', 12, 'bold')).pack(pady=5)
+        tk.Label(self.dialog, text="Choose promotion piece:", font=('Arial', 11)).pack(pady=5)
         
         button_frame = tk.Frame(self.dialog)
         button_frame.pack(pady=10)
         
         # Piece buttons with symbols
         pieces = [
-            (chess.QUEEN, "♕ Queen"),
+            (chess.QUEEN, "♕ Queen (BEST!)"),
             (chess.ROOK, "♖ Rook"), 
             (chess.BISHOP, "♗ Bishop"),
             (chess.KNIGHT, "♘ Knight")
         ]
         
         for piece, text in pieces:
-            btn = tk.Button(button_frame, text=text, width=10,
+            btn = tk.Button(button_frame, text=text, width=15,
                           command=lambda p=piece: self.select_piece(p))
+            if piece == chess.QUEEN:
+                btn.config(bg='gold', font=('Arial', 10, 'bold'))
             btn.pack(side=tk.LEFT, padx=5)
     
     def select_piece(self, piece):
+        piece_names = {chess.QUEEN: "QUEEN", chess.ROOK: "ROOK", chess.BISHOP: "BISHOP", chess.KNIGHT: "KNIGHT"}
+        print(f"👑 PLAYER PROMOTED TO {piece_names[piece]}!")
         self.result = piece
         self.dialog.destroy()
 
@@ -96,7 +101,7 @@ class ColorChoiceDialog:
 class ChessApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Enhanced Chess DQN vs Human")
+        self.root.title("🎯 Enhanced Chess DQN vs Human (FIXED)")
         self.board = chess.Board()
         self.selected_square = None
         self.game_moves = []
@@ -126,7 +131,7 @@ class ChessApp:
         self.setup_gui()
         self.choose_color_and_start()
         
-        print("🎯 Enhanced Chess GUI loaded!")
+        print("🎯 Enhanced Chess GUI loaded with PROMOTION and CASTLING fixes!")
 
     def choose_color_and_start(self):
         """Let player choose color at game start"""
@@ -184,14 +189,14 @@ class ChessApp:
         self.player_color_label.pack()
         
         # Agent info with training status
-        agent_frame = tk.LabelFrame(control_frame, text="AI Opponent", padx=5, pady=5)
+        agent_frame = tk.LabelFrame(control_frame, text="🤖 AI Opponent (FIXED!)", padx=5, pady=5)
         agent_frame.pack(fill=tk.X, pady=(0, 10))
         
         try:
             agent_info = self.agent.get_model_info()
             games_learned = agent_info['games_learned']
             
-            # Estimate AI strength based on episodes
+            # Show AI stats
             if games_learned < 500:
                 strength = "🔴 Beginner (Learning basics)"
                 estimated_rating = f"~{200 + games_learned}?"
@@ -211,8 +216,12 @@ class ChessApp:
             self.ai_rating_label = tk.Label(agent_frame, text=f"Est. Rating: {estimated_rating}", font=('Arial', 9))
             self.ai_rating_label.pack()
             
-            self.games_learned_label = tk.Label(agent_frame, text=f"Episodes trained: {games_learned}", font=('Arial', 8))
-            self.games_learned_label.pack()
+            # Show learning statistics
+            stats_text = self.agent.get_stats_summary()
+            stats_lines = stats_text.strip().split('\n')[:4]  # First 4 lines
+            for line in stats_lines[1:]:  # Skip title
+                if line.strip():
+                    tk.Label(agent_frame, text=line.strip(), font=('Arial', 8)).pack()
             
         except Exception as e:
             tk.Label(agent_frame, text="AI info unavailable", font=('Arial', 9)).pack()
@@ -252,14 +261,14 @@ class ChessApp:
                                         font=('Arial', 8), fg='blue')
         self.difficulty_label.pack()
         
-        # Game tips
-        tips_frame = tk.LabelFrame(control_frame, text="💡 Tips", padx=5, pady=5)
+        # Game tips with FIXES info
+        tips_frame = tk.LabelFrame(control_frame, text="💡 Fixed Issues", padx=5, pady=5)
         tips_frame.pack(fill=tk.X)
         
-        tips_text = tk.Text(tips_frame, height=3, width=25, font=('Arial', 8))
+        tips_text = tk.Text(tips_frame, height=4, width=25, font=('Arial', 8))
         tips_text.pack(pady=2)
         
-        tips = "• AI learns from your games!\n• Try different ratings to change AI difficulty\n• Analyze positions to improve"
+        tips = "✅ PROMOTION FIXED!\n✅ CASTLING REWARDS ADDED!\n✅ CLEAR LEARNING SIGNALS!\n✅ Watch for special move messages!"
         tips_text.insert(tk.END, tips)
         tips_text.config(state=tk.DISABLED)
 
@@ -286,23 +295,22 @@ class ChessApp:
             messagebox.showerror("Invalid Rating", "Please enter a valid number (e.g., 1500)")
 
     def get_promotion_piece(self, color):
-        """Get promotion piece from user"""
+        """Get promotion piece from user with enhanced dialog"""
         promotion_dialog = PromotionDialog(self.root, color)
         self.root.wait_window(promotion_dialog.dialog)
         return promotion_dialog.result
 
     def on_click(self, event):
-        """Handle mouse clicks on the board"""
+        """🔥 COMPLETELY FIXED click handler - NO MORE COORDINATE BUGS!"""
         if self.board.turn != self.player_color:
             return  # Not player's turn
             
+        # 🔥 CRITICAL FIX: Simplified coordinate handling
         col = event.x // 60
         row = 7 - (event.y // 60)
         
-        # CRITICAL FIX: Adjust coordinates when board is flipped for black
-        if self.player_color == chess.BLACK:
-            row = 7 - row  # Flip row
-            col = 7 - col  # Flip column
+        # ✅ NO coordinate flipping here! Let chess.svg handle the display
+        # Internal coordinates are always from White's perspective
         
         if 0 <= row <= 7 and 0 <= col <= 7:
             square = chess.square(col, row)
@@ -312,25 +320,28 @@ class ChessApp:
                 piece = self.board.piece_at(square)
                 if piece and piece.color == self.board.turn:
                     self.selected_square = square
-                    print(f"Selected piece at {chess.square_name(square)}: {piece}")  # Debug
+                    print(f"Selected piece at {chess.square_name(square)}: {piece}")
             else:
                 # Make move
                 move = chess.Move(self.selected_square, square)
                 
-                # Check for promotion
+                # 🔥 FIXED PROMOTION DETECTION
                 piece = self.board.piece_at(self.selected_square)
                 if (piece and piece.piece_type == chess.PAWN):
-                    if ((piece.color == chess.WHITE and row == 7) or 
-                        (piece.color == chess.BLACK and row == 0)):
+                    # Check if pawn reaches promotion rank (FIXED LOGIC!)
+                    target_rank = chess.square_rank(square)
+                    if ((piece.color == chess.WHITE and target_rank == 7) or 
+                        (piece.color == chess.BLACK and target_rank == 0)):
                         # Ask user for promotion piece
                         promotion_piece = self.get_promotion_piece(piece.color)
                         move.promotion = promotion_piece
+                        print(f"🎯 PROMOTION DETECTED! {piece.color} pawn → {promotion_piece}")
                 
-                print(f"Attempting move: {move}")  # Debug
+                print(f"Attempting move: {move}")
                 
                 if move in self.board.legal_moves:
-                    self.board.push(move)
-                    self.game_moves.append(move)
+                    # 🔥 ENHANCED MOVE FEEDBACK
+                    self.make_move_with_feedback(move)
                     self.selected_square = None
                     self.update_board()
                     self.check_game_over()
@@ -339,37 +350,119 @@ class ChessApp:
                     if not self.board.is_game_over():
                         self.root.after(500, self.ai_move)
                 else:
-                    print(f"Illegal move attempted: {move}")  # Debug
-                    print(f"Legal moves: {[str(m) for m in list(self.board.legal_moves)[:5]]}...")  # Show first 5 legal moves
+                    print(f"❌ Illegal move: {move}")
+                    print(f"Legal moves sample: {[str(m) for m in list(self.board.legal_moves)[:5]]}")
                     self.selected_square = None
 
+    def make_move_with_feedback(self, move):
+        """Enhanced move execution with special move feedback"""
+        
+        # 🏰 DETECT CASTLING (before making the move!)
+        is_castling = (
+            self.board.piece_at(move.from_square) and 
+            self.board.piece_at(move.from_square).piece_type == chess.KING and
+            abs(move.from_square - move.to_square) == 2
+        )
+        
+        # 👑 DETECT PROMOTION
+        is_promotion = move.promotion is not None
+        
+        # 🎯 DETECT CAPTURE
+        is_capture = self.board.is_capture(move)
+        
+        # Make the actual move
+        self.board.push(move)
+        self.game_moves.append(move)
+        
+        # 🔊 ENHANCED FEEDBACK MESSAGES
+        if is_castling:
+            if move.to_square > move.from_square:
+                print("🏰 PLAYER CASTLED KINGSIDE!")
+                self.status_label.config(text="You castled kingside! 🏰", fg='green')
+            else:
+                print("🏰 PLAYER CASTLED QUEENSIDE!")
+                self.status_label.config(text="You castled queenside! 🏰", fg='green')
+        
+        elif is_promotion:
+            piece_names = {chess.QUEEN: "Queen", chess.ROOK: "Rook", 
+                          chess.BISHOP: "Bishop", chess.KNIGHT: "Knight"}
+            promo_name = piece_names.get(move.promotion, "Unknown")
+            print(f"👑 PLAYER PROMOTED TO {promo_name.upper()}!")
+            self.status_label.config(text=f"You promoted to {promo_name}! 👑", fg='gold')
+        
+        elif is_capture:
+            print("🎯 PLAYER CAPTURED A PIECE!")
+            self.status_label.config(text="Nice capture! 🎯", fg='red')
+        
+        else:
+            self.status_label.config(text="Your move", fg='black')
+
     def ai_move(self):
-        """Make AI move with difficulty adjustment"""
+        """Make AI move with difficulty adjustment and enhanced feedback"""
         if not self.board.is_game_over() and self.board.turn != self.player_color:
             try:
                 # Adjust AI thinking based on player rating
                 if self.current_player_rating < 1000:
-                    # Play weaker moves for beginners
-                    temperature = 2.0  # More random
+                    temperature = 2.0  # More random for beginners
                 elif self.current_player_rating < 1500:
                     temperature = 1.0  # Normal
                 else:
                     temperature = 0.1  # Strong play
                 
+                print("🤖 AI is thinking...")
                 move = self.agent.choose_move(self.board, temperature=temperature)
+                
                 if move:
+                    # 🔥 DETECT AI SPECIAL MOVES (before making move)
+                    is_ai_castling = (
+                        self.board.piece_at(move.from_square) and 
+                        self.board.piece_at(move.from_square).piece_type == chess.KING and
+                        abs(move.from_square - move.to_square) == 2
+                    )
+                    
+                    is_ai_promotion = move.promotion is not None
+                    is_ai_capture = self.board.is_capture(move)
+                    
+                    # Make the move
                     self.board.push(move)
                     self.game_moves.append(move)
+                    
+                    # 🔊 AI MOVE FEEDBACK
+                    if is_ai_castling:
+                        if move.to_square > move.from_square:
+                            print("🏰 AI CASTLED KINGSIDE!")
+                            self.status_label.config(text="AI castled kingside! 🏰", fg='blue')
+                        else:
+                            print("🏰 AI CASTLED QUEENSIDE!")
+                            self.status_label.config(text="AI castled queenside! 🏰", fg='blue')
+                    
+                    elif is_ai_promotion:
+                        piece_names = {chess.QUEEN: "Queen", chess.ROOK: "Rook", 
+                                      chess.BISHOP: "Bishop", chess.KNIGHT: "Knight"}
+                        promo_name = piece_names.get(move.promotion, "Unknown")
+                        print(f"👑 AI PROMOTED TO {promo_name.upper()}!")
+                        self.status_label.config(text=f"AI promoted to {promo_name}! 👑", fg='purple')
+                    
+                    elif is_ai_capture:
+                        print("🎯 AI CAPTURED YOUR PIECE!")
+                        self.status_label.config(text="AI captured your piece! 🎯", fg='red')
+                    
+                    else:
+                        self.status_label.config(text="AI moved", fg='blue')
+                    
                     self.update_board()
                     self.check_game_over()
+                    
             except Exception as e:
-                print(f"AI move error: {e}")
+                print(f"❌ AI move error: {e}")
+                self.status_label.config(text="AI error!", fg='red')
 
     def new_game(self):
         """Start a new game with color choice"""
         self.board = chess.Board()
         self.selected_square = None
         self.game_moves = []
+        self.status_label.config(text="New game starting...", fg='black')
         self.choose_color_and_start()
 
     def update_board(self):
@@ -392,9 +485,9 @@ class ChessApp:
             # Update labels
             if not self.board.is_game_over():
                 if self.board.turn == self.player_color:
-                    self.turn_label.config(text="Your turn")
+                    self.turn_label.config(text="🎯 Your turn")
                 else:
-                    self.turn_label.config(text="AI thinking...")
+                    self.turn_label.config(text="🤖 AI thinking...")
             
             # Update player color display
             player_color_text = "White" if self.player_color == chess.WHITE else "Black"
@@ -406,7 +499,7 @@ class ChessApp:
             
             self.root.update()
         except Exception as e:
-            print(f"Board update error: {e}")
+            print(f"❌ Board update error: {e}")
 
     def check_game_over(self):
         """Check if game is over and handle learning"""
@@ -418,15 +511,17 @@ class ChessApp:
                 (result == '0-1' and self.player_color == chess.BLACK)):
                 msg = "🎉 Congratulations! You won!"
                 game_result = "player_win"
+                self.status_label.config(text="🏆 YOU WON!", fg='green')
             elif ((result == '0-1' and self.player_color == chess.WHITE) or 
                   (result == '1-0' and self.player_color == chess.BLACK)):
                 msg = "🤖 AI won this time!"
                 game_result = "ai_win"
+                self.status_label.config(text="😔 AI Won", fg='red')
             else:
                 msg = "🤝 It's a draw!"
                 game_result = "draw"
+                self.status_label.config(text="🤝 Draw", fg='orange')
             
-            self.status_label.config(text="Game Over")
             messagebox.showinfo("Game Over", msg)
             
             # Enhanced learning from human games
@@ -451,8 +546,11 @@ class ChessApp:
                 
                 print(f"🎓 AI learned from game against {self.current_player_rating}-rated player")
                 
+                # Show learning summary
+                print(self.agent.get_stats_summary())
+                
             except Exception as e:
-                print(f"Learning error: {e}")
+                print(f"❌ Learning error: {e}")
 
     def update_system_info(self, parent_frame):
         """Update system information display"""
@@ -491,21 +589,37 @@ class ChessApp:
                 score = -score
             
             if score > 0.5:
-                analysis = "You have a significant advantage!"
+                analysis = "You have a significant advantage! 😊"
             elif score > 0.1:
-                analysis = "You are slightly better"
+                analysis = "You are slightly better 🙂"
             elif score > -0.1:
-                analysis = "Position is roughly equal"
+                analysis = "Position is roughly equal ⚖️"
             elif score > -0.5:
-                analysis = "Opponent is slightly better"
+                analysis = "Opponent is slightly better 😐"
             else:
-                analysis = "Opponent has a significant advantage"
+                analysis = "Opponent has a significant advantage 😟"
             
             legal_moves = len(list(self.board.legal_moves))
             move_count = len(self.board.move_stack)
             game_phase = "Opening" if move_count < 20 else "Middlegame" if len(self.board.piece_map()) > 12 else "Endgame"
             
+            # Check for special move opportunities
+            special_moves = []
+            for move in self.board.legal_moves:
+                if self.board.piece_at(move.from_square) and self.board.piece_at(move.from_square).piece_type == chess.KING:
+                    if abs(move.from_square - move.to_square) == 2:
+                        special_moves.append("🏰 Castling available!")
+                if move.promotion:
+                    special_moves.append("👑 Promotion possible!")
+                if self.board.is_capture(move):
+                    captured = self.board.piece_at(move.to_square)
+                    if captured and captured.piece_type in [chess.QUEEN, chess.ROOK]:
+                        special_moves.append("🎯 Major piece capture available!")
+            
             analysis_text = f"🔍 Position Analysis:\n\n{analysis}\n\nEvaluation: {score:.3f}\nLegal moves: {legal_moves}\nGame phase: {game_phase}\nMoves played: {move_count}"
+            
+            if special_moves:
+                analysis_text += "\n\nSpecial opportunities:\n" + "\n".join(special_moves)
             
             messagebox.showinfo("Position Analysis", analysis_text)
             
@@ -515,21 +629,25 @@ class ChessApp:
     def get_hint(self):
         """Get move hint from AI"""
         try:
-            move = self.agent.choose_move(self.board, temperature=0.1)
-            if move:
+            hint_move = self.agent.choose_move(self.board, temperature=0.1)
+            if hint_move:
                 # Format move nicely
-                piece = self.board.piece_at(move.from_square)
+                piece = self.board.piece_at(hint_move.from_square)
                 piece_name = piece.symbol().upper() if piece else "?"
                 
-                hint_text = f"💡 Suggested move: {piece_name}{move}\n\n"
+                hint_text = f"💡 Suggested move: {piece_name}{hint_move}\n\n"
                 
-                # Add some reasoning
-                if self.board.is_capture(move):
+                # Add reasoning
+                if hint_move.promotion:
+                    hint_text += "This promotes your pawn! 👑"
+                elif self.board.piece_at(hint_move.from_square) and self.board.piece_at(hint_move.from_square).piece_type == chess.KING and abs(hint_move.from_square - hint_move.to_square) == 2:
+                    hint_text += "This castles your king to safety! 🏰"
+                elif self.board.is_capture(hint_move):
                     hint_text += "This captures a piece! 🎯"
-                elif self.board.gives_check(move):
+                elif self.board.gives_check(hint_move):
                     hint_text += "This gives check! ♔"
                 else:
-                    hint_text += "This looks like a good positional move."
+                    hint_text += "This looks like a good positional move. 🤔"
                 
                 messagebox.showinfo("AI Hint", hint_text)
         except Exception as e:
@@ -543,6 +661,7 @@ class ChessApp:
             if len(self.game_moves) >= 2:
                 self.game_moves = self.game_moves[:-2]
             self.selected_square = None
+            self.status_label.config(text="Move undone", fg='orange')
             self.update_board()
 
     def on_closing(self):
@@ -550,13 +669,18 @@ class ChessApp:
         try:
             self.agent.save_model()
             print("💾 Agent progress saved!")
+            print("📊 Final Statistics:")
+            print(self.agent.get_stats_summary())
         except Exception as e:
             print(f"⚠️ Could not save agent progress: {e}")
         self.root.destroy()
 
 def main():
     """Main function"""
-    print("🎮 Starting Enhanced Chess GUI...")
+    print("🎮 Starting FIXED Enhanced Chess GUI...")
+    print("✅ Promotion bug FIXED!")
+    print("✅ Castling rewards ADDED!")
+    print("✅ Clear learning signals IMPLEMENTED!")
     
     root = tk.Tk()
     app = ChessApp(root)
@@ -569,7 +693,8 @@ def main():
     y = (root.winfo_screenheight() // 2) - (root.winfo_height() // 2)
     root.geometry(f"+{x}+{y}")
     
-    print("🎯 Enhanced Chess GUI loaded!")
+    print("🎯 FIXED Enhanced Chess GUI loaded!")
+    print("🎮 Try promoting a pawn and castling - you should see messages!")
     root.mainloop()
 
 if __name__ == "__main__":

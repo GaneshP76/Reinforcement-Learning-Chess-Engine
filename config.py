@@ -1,153 +1,324 @@
-#Central configuration for your Chess DQN
-"""
-Enhanced Chess DQN Configuration
-Centralized settings for easy modification
-"""
-
 import torch
 import os
+import psutil
+import time
 
 class ChessDQNConfig:
-    """Central configuration for all training parameters"""
+    """FIXED Configuration for Chess DQN Training - CLEAR LEARNING SIGNALS"""
     
-    # ===============================
-    # TRAINING EPISODES
-    # ===============================
-    EPISODES = 5000  # 🔄 MODIFY THIS FOR TRAINING LENGTH
-    QUICK_TEST_EPISODES = 200  # For testing setup
-    EVALUATION_GAMES = 100  # For performance evaluation
-    
-    # ===============================
-    # HARDWARE OPTIMIZATION
-    # ===============================
-    # Your RTX 2060 settings (optimized)
-    DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    BATCH_SIZE = 64  # Optimal for 6GB VRAM
-    MAX_REPLAY_BUFFER = 30000  # ~1GB memory usage
-    NUM_WORKERS = 4  # For your 6-core CPU (with hyperthreading)
-    
-    # ===============================
-    # CHECKPOINT SETTINGS  
-    # ===============================
-    SAVE_FREQUENCY = 50  # Save every N episodes
-    EVAL_FREQUENCY = 200  # Evaluate every N episodes
-    BACKUP_FREQUENCY = 500  # Create backup every N episodes
-    AUTO_RESUME = True  # Resume from checkpoint automatically
-    
-    # ===============================
-    # STORAGE OPTIMIZATION
-    # ===============================
-    # Paths
-    DATA_DIR = "data"
-    CHECKPOINT_PATH = f"{DATA_DIR}/enhanced_dqn_checkpoint.pth"
-    BACKUP_DIR = f"{DATA_DIR}/backups"
-    LOG_PATH = f"{DATA_DIR}/training_log.csv"
-    
-    # Storage limits (to prevent disk overflow)
-    MAX_CHECKPOINTS = 5  # Keep only 5 recent checkpoints
-    MAX_BACKUPS = 3  # Keep only 3 backup sets
-    LOG_ROTATION_SIZE = 10  # MB before rotating logs
-    
-    # ===============================
-    # TRAINING HYPERPARAMETERS
-    # ===============================
-    LEARNING_RATE = 1e-4
-    GAMMA = 0.99  # Discount factor
-    EPSILON_START = 1.0
-    EPSILON_END = 0.05
-    EPSILON_DECAY = 0.995
-    TARGET_UPDATE_FREQ = 10
-    
-    # ===============================
-    # MODEL ARCHITECTURE
-    # ===============================
-    CONV_FILTERS = [128, 256]  # Optimized for RTX 2060
-    RESIDUAL_BLOCKS = 4
-    ATTENTION_HEADS = 8
-    DROPOUT_RATE = 0.3
-    
-    # ===============================
-    # PERFORMANCE MONITORING
-    # ===============================
-    PRINT_FREQUENCY = 25  # Print progress every N episodes
-    DETAILED_LOGGING = True
-    PLOT_GRAPHS = True  # Auto-generate training graphs
-    
-    # ===============================
-    # SAFETY FEATURES
-    # ===============================
-    MAX_GAME_LENGTH = 200  # Prevent infinite games
-    MEMORY_CHECK_FREQ = 100  # Check memory usage every N episodes
-    AUTO_CLEANUP = True  # Clean old files automatically
-    
-    @classmethod
-    def get_device_info(cls):
-        """Get detailed device information"""
-        if torch.cuda.is_available():
-            return {
-                'device': 'CUDA',
-                'gpu_name': torch.cuda.get_device_name(0),
-                'gpu_memory': torch.cuda.get_device_properties(0).total_memory // 1024**3,
-                'cuda_version': torch.version.cuda,
-                'optimal_batch_size': cls.BATCH_SIZE
-            }
-        else:
-            return {
-                'device': 'CPU',
-                'threads': torch.get_num_threads(),
-                'optimal_batch_size': cls.BATCH_SIZE // 2
-            }
-    
-    @classmethod
-    def create_directories(cls):
-        """Create necessary directories"""
-        dirs = [cls.DATA_DIR, cls.BACKUP_DIR]
-        for dir_path in dirs:
-            os.makedirs(dir_path, exist_ok=True)
-        print(f"📁 Created directories: {', '.join(dirs)}")
-    
-    @classmethod  
-    def estimate_training_time(cls):
-        """Estimate training time based on episodes and hardware"""
-        if torch.cuda.is_available():
-            episodes_per_hour = 800  # RTX 2060 estimate
-        else:
-            episodes_per_hour = 200  # CPU estimate
+    def __init__(self):
+        # 🚀 DEVICE SETUP
+        self.DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self._print_device_info()
         
-        hours = cls.EPISODES / episodes_per_hour
+        # 🧠 TRAINING PARAMETERS - OPTIMIZED FOR LEARNING
+        self.EPISODES = 30000           # More episodes needed for chess mastery
+        self.BATCH_SIZE = 64            # Reduced for RTX 2060 memory
+        self.LEARNING_RATE = 0.0003     # Slower learning for stability
+        self.GAMMA = 0.99               # Discount factor
+        
+        # 🎯 EXPLORATION - FIXED SCHEDULE
+        self.EPSILON_START = 1.0        # Start with full exploration
+        self.EPSILON_END = 0.05         # End with minimal exploration
+        self.EPSILON_DECAY = 0.9995     # Very slow decay (important!)
+        
+        # 💾 MEMORY AND UPDATES - OPTIMIZED
+        self.MAX_REPLAY_BUFFER = 100000 # Large buffer for diverse experiences
+        self.TARGET_UPDATE_FREQ = 500   # Update target network less frequently
+        self.MAX_GAME_LENGTH = 200      # Prevent infinite games
+        
+        # 📁 PATHS
+        self.DATA_DIR = "data"
+        self.CHECKPOINT_PATH = "data/fixed_enhanced_dqn_checkpoint.pth"
+        self.LOG_PATH = "data/fixed_training_log.csv"
+        
+        # 📈 TRAINING FREQUENCIES
+        self.SAVE_FREQUENCY = 200       # Save every 200 episodes
+        self.EVAL_FREQUENCY = 1000      # Evaluate every 1000 episodes  
+        self.PRINT_FREQUENCY = 100      # Print progress every 100 episodes
+        
+        # 🔧 ADVANCED PARAMETERS
+        self.MIN_REPLAY_SIZE = 1000     # Minimum experiences before training
+        self.PRIORITY_ALPHA = 0.6       # Prioritized replay parameter
+        self.PRIORITY_BETA = 0.4        # Importance sampling parameter
+        
+        # Create necessary directories
+        self.create_directories()
+        
+    def _print_device_info(self):
+        """Print device and system information"""
+        print(f"🚀 Device: {self.DEVICE}")
+        
+        if self.DEVICE.type == "cuda":
+            gpu_name = torch.cuda.get_device_name(0)
+            gpu_memory = torch.cuda.get_device_properties(0).total_memory / 1e9
+            print(f"   GPU: {gpu_name}")
+            print(f"   VRAM: {gpu_memory:.1f}GB")
+            
+            # Check if it's RTX 2060 (give specific advice)
+            if "2060" in gpu_name:
+                print("   ✅ RTX 2060 detected - perfect for chess training!")
+                print("   💡 Batch size optimized for your GPU")
+        else:
+            print("   ⚠️ Using CPU - training will be slower")
+            print("   💡 Consider reducing BATCH_SIZE to 32 if memory issues")
+        
+        # System RAM info
+        ram_gb = psutil.virtual_memory().total / 1e9
+        print(f"   RAM: {ram_gb:.1f}GB")
+        
+    def create_directories(self):
+        """Create necessary directories"""
+        directories = [
+            self.DATA_DIR,
+            "data/backups",
+            "data/logs",
+            "data/models"
+        ]
+        
+        for directory in directories:
+            os.makedirs(directory, exist_ok=True)
+        
+        print(f"📁 Created directories: {', '.join(directories)}")
+    
+    def print_config_summary(self):
+        """Print configuration summary"""
+        print("\n" + "="*60)
+        print("🔧 FIXED CHESS DQN CONFIGURATION")
+        print("="*60)
+        print(f"🎯 Episodes: {self.EPISODES:,}")
+        print(f"🧠 Batch Size: {self.BATCH_SIZE}")
+        print(f"📚 Learning Rate: {self.LEARNING_RATE}")
+        print(f"🎲 Epsilon: {self.EPSILON_START} → {self.EPSILON_END}")
+        print(f"💾 Replay Buffer: {self.MAX_REPLAY_BUFFER:,}")
+        print(f"🚀 Device: {self.DEVICE}")
+        
+        print(f"\n📈 Training Schedule:")
+        print(f"   💾 Save every: {self.SAVE_FREQUENCY} episodes")
+        print(f"   🎯 Evaluate every: {self.EVAL_FREQUENCY} episodes") 
+        print(f"   📊 Print every: {self.PRINT_FREQUENCY} episodes")
+        
+        print(f"\n📁 Key Files:")
+        print(f"   🧠 Model: {self.CHECKPOINT_PATH}")
+        print(f"   📊 Logs: {self.LOG_PATH}")
+        
+        print("="*60)
+    
+    def estimate_training_time(self):
+        """Estimate training time based on system"""
+        # Base estimates (in seconds per episode)
+        if self.DEVICE.type == "cuda":
+            # GPU estimates
+            gpu_name = torch.cuda.get_device_name(0).lower()
+            if "2060" in gpu_name:
+                base_time = 3.0  # RTX 2060 estimate
+            elif "2070" in gpu_name or "2080" in gpu_name:
+                base_time = 2.5  # Faster RTX cards
+            elif "1060" in gpu_name or "1070" in gpu_name:
+                base_time = 4.0  # Older GTX cards
+            else:
+                base_time = 3.5  # Generic GPU estimate
+        else:
+            base_time = 8.0  # CPU is much slower
+        
+        # Calculate total time
+        total_seconds = self.EPISODES * base_time
+        total_hours = total_seconds / 3600
+        
         return {
-            'total_hours': round(hours, 1),
-            'episodes_per_hour': episodes_per_hour,
-            'estimated_storage_gb': round(cls.EPISODES / 1000 * 0.5, 1)
+            'seconds_per_episode': base_time,
+            'total_seconds': total_seconds,
+            'total_hours': total_hours,
+            'estimated_completion': f"{total_hours:.1f} hours ({total_hours/24:.1f} days)"
         }
     
-    @classmethod
-    def print_config_summary(cls):
-        """Print configuration summary"""
-        device_info = cls.get_device_info()
-        time_estimate = cls.estimate_training_time()
+    def get_memory_requirements(self):
+        """Get memory requirements"""
+        # Model memory (approximate)
+        model_params = 20_000_000  # ~20M parameters
+        model_memory_gb = (model_params * 4 * 2) / 1e9  # 4 bytes per param, 2 models
         
-        print("🚀 CHESS DQN CONFIGURATION")
-        print("=" * 50)
-        print(f"📊 Episodes: {cls.EPISODES:,}")
-        print(f"💻 Device: {device_info['device']}")
-        if 'gpu_name' in device_info:
-            print(f"🎮 GPU: {device_info['gpu_name']}")
-            print(f"💾 GPU Memory: {device_info['gpu_memory']}GB")
-        print(f"⚡ Batch Size: {cls.BATCH_SIZE}")
-        print(f"🕐 Estimated Time: {time_estimate['total_hours']} hours")
-        print(f"💽 Estimated Storage: {time_estimate['estimated_storage_gb']}GB")
-        print(f"💾 Checkpoint Every: {cls.SAVE_FREQUENCY} episodes")
-        print("=" * 50)
+        # Replay buffer memory
+        replay_memory_gb = (self.MAX_REPLAY_BUFFER * 0.001)  # Rough estimate
+        
+        # Total GPU memory needed
+        total_gpu_gb = model_memory_gb + replay_memory_gb + 1.0  # +1GB overhead
+        
+        # System RAM needed
+        system_ram_gb = 4.0  # Base system needs
+        
+        return {
+            'model_memory_gb': model_memory_gb,
+            'replay_memory_gb': replay_memory_gb,
+            'total_gpu_gb': total_gpu_gb,
+            'system_ram_gb': system_ram_gb
+        }
+    
+    def check_system_compatibility(self):
+        """Check if system can handle training"""
+        memory_req = self.get_memory_requirements()
+        issues = []
+        
+        # Check GPU memory
+        if self.DEVICE.type == "cuda":
+            gpu_memory_gb = torch.cuda.get_device_properties(0).total_memory / 1e9
+            if gpu_memory_gb < memory_req['total_gpu_gb']:
+                issues.append(f"GPU memory low: {gpu_memory_gb:.1f}GB < {memory_req['total_gpu_gb']:.1f}GB needed")
+                issues.append("Solution: Reduce BATCH_SIZE to 32 or 16")
+        
+        # Check system RAM
+        system_ram_gb = psutil.virtual_memory().total / 1e9
+        if system_ram_gb < memory_req['system_ram_gb']:
+            issues.append(f"System RAM low: {system_ram_gb:.1f}GB < {memory_req['system_ram_gb']:.1f}GB needed")
+        
+        # Check disk space
+        free_space = psutil.disk_usage('.').free / 1e9
+        if free_space < 5.0:  # Need at least 5GB
+            issues.append(f"Disk space low: {free_space:.1f}GB free, need 5GB+")
+        
+        return {
+            'compatible': len(issues) == 0,
+            'issues': issues,
+            'memory_requirements': memory_req
+        }
+    
+    def optimize_for_system(self):
+        """Auto-optimize settings based on system capabilities"""
+        compat = self.check_system_compatibility()
+        
+        if not compat['compatible']:
+            print("⚠️ System optimization needed!")
+            
+            for issue in compat['issues']:
+                print(f"   • {issue}")
+                
+                # Auto-fix common issues
+                if "GPU memory low" in issue:
+                    old_batch = self.BATCH_SIZE
+                    self.BATCH_SIZE = max(16, self.BATCH_SIZE // 2)
+                    print(f"   🔧 Auto-reduced batch size: {old_batch} → {self.BATCH_SIZE}")
+                
+                elif "System RAM low" in issue:
+                    old_buffer = self.MAX_REPLAY_BUFFER
+                    self.MAX_REPLAY_BUFFER = max(50000, self.MAX_REPLAY_BUFFER // 2)
+                    print(f"   🔧 Auto-reduced replay buffer: {old_buffer:,} → {self.MAX_REPLAY_BUFFER:,}")
+        
+        else:
+            print("✅ System is compatible with current settings!")
+    
+    def save_config(self, filepath=None):
+        """Save current configuration"""
+        if filepath is None:
+            filepath = os.path.join(self.DATA_DIR, "training_config.txt")
+        
+        with open(filepath, 'w') as f:
+            f.write("FIXED CHESS DQN CONFIGURATION\n")
+            f.write("="*50 + "\n")
+            f.write(f"Generated: {time.strftime('%Y-%m-%d %H:%M:%S')}\n\n")
+            
+            f.write("TRAINING PARAMETERS:\n")
+            f.write(f"Episodes: {self.EPISODES:,}\n")
+            f.write(f"Batch Size: {self.BATCH_SIZE}\n") 
+            f.write(f"Learning Rate: {self.LEARNING_RATE}\n")
+            f.write(f"Gamma: {self.GAMMA}\n")
+            f.write(f"Device: {self.DEVICE}\n\n")
+            
+            f.write("EXPLORATION:\n")
+            f.write(f"Epsilon Start: {self.EPSILON_START}\n")
+            f.write(f"Epsilon End: {self.EPSILON_END}\n")
+            f.write(f"Epsilon Decay: {self.EPSILON_DECAY}\n\n")
+            
+            f.write("MEMORY:\n")
+            f.write(f"Replay Buffer: {self.MAX_REPLAY_BUFFER:,}\n")
+            f.write(f"Target Update Freq: {self.TARGET_UPDATE_FREQ}\n\n")
+            
+            f.write("PATHS:\n")
+            f.write(f"Checkpoint: {self.CHECKPOINT_PATH}\n")
+            f.write(f"Logs: {self.LOG_PATH}\n")
+        
+        print(f"💾 Configuration saved to {filepath}")
 
-# Usage examples:
-if __name__ == "__main__":
-    # Test configuration
+# SIMPLIFIED REWARD CONFIG
+class RewardConfig:
+    """FIXED reward configuration - clear learning signals"""
+    
+    # 🏆 GAME ENDING REWARDS (MASSIVE)
+    CHECKMATE_REWARD = 10.0
+    STALEMATE_PENALTY = -3.0
+    
+    # 🏰 SPECIAL MOVE REWARDS (BIG)
+    CASTLING_REWARD = 3.0
+    QUEEN_PROMOTION_REWARD = 8.0
+    OTHER_PROMOTION_REWARD = 4.0
+    
+    # 🎯 TACTICAL REWARDS (MEDIUM)
+    PIECE_VALUES = {
+        1: 1.0,   # Pawn
+        2: 3.0,   # Knight
+        3: 3.0,   # Bishop  
+        4: 5.0,   # Rook
+        5: 9.0,   # Queen
+        6: 0.0    # King
+    }
+    
+    # ⚔️ SMALL BONUSES
+    CHECK_BONUS = 0.5
+    
+    # 🔄 PENALTIES
+    REPETITION_PENALTY = -0.2
+    TIME_PENALTY = -0.01  # Encourage decisive play
+    
+    @classmethod
+    def print_reward_structure(cls):
+        """Print reward structure"""
+        print("\n🎯 FIXED REWARD STRUCTURE:")
+        print("="*40)
+        print(f"🏆 Checkmate: +{cls.CHECKMATE_REWARD}")
+        print(f"😐 Stalemate: {cls.STALEMATE_PENALTY}")
+        print(f"🏰 Castling: +{cls.CASTLING_REWARD}")
+        print(f"👑 Queen Promotion: +{cls.QUEEN_PROMOTION_REWARD}")
+        print(f"⚔️ Check: +{cls.CHECK_BONUS}")
+        print("\n🎯 Piece Values:")
+        for piece_type, value in cls.PIECE_VALUES.items():
+            piece_names = {1: "Pawn", 2: "Knight", 3: "Bishop", 4: "Rook", 5: "Queen", 6: "King"}
+            if piece_type != 6:  # Skip king
+                print(f"   {piece_names[piece_type]}: +{value}")
+        print("="*40)
+
+def main():
+    """Test configuration"""
+    print("🧪 Testing FIXED configuration...")
+    
     config = ChessDQNConfig()
-    config.create_directories()
     config.print_config_summary()
     
-    # Modify episodes for different training phases:
-    # config.EPISODES = 1000      # Quick training
-    # config.EPISODES = 5000      # Standard training  
-    # config.EPISODES = 15000     # Extensive training
+    # Check system compatibility
+    print("\n🔍 System Compatibility Check:")
+    compat = config.check_system_compatibility()
+    
+    if compat['compatible']:
+        print("✅ System is ready for training!")
+    else:
+        print("⚠️ Issues found:")
+        for issue in compat['issues']:
+            print(f"   • {issue}")
+        
+        print("\n🔧 Applying automatic optimizations...")
+        config.optimize_for_system()
+    
+    # Show reward structure
+    RewardConfig.print_reward_structure()
+    
+    # Estimate training time
+    time_est = config.estimate_training_time()
+    print(f"\n⏰ Training Time Estimate:")
+    print(f"   Per episode: ~{time_est['seconds_per_episode']:.1f} seconds")
+    print(f"   Total time: {time_est['estimated_completion']}")
+    
+    # Save config
+    config.save_config()
+    
+    print("\n🚀 Configuration ready!")
+
+if __name__ == "__main__":
+    main()
