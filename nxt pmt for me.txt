@@ -1,1 +1,24 @@
-also what about the storage of data is stores if i want to execute in different pc will i need to transfer all the storage it does to perform optimally because i dont want to train every singlt time i wanna play from different pc. also there is the issue where i wanna develop it into app. and play on mobile so storage will be the issue. what is the solutions to this
+also what about the storage of data is stores if i want to execute in different pc will i need to transfer all the storage  
+it does to perform optimally because i dont want to train every singlt time i wanna play from different pc. also there is the issue where i wanna develop it into app.
+and play on mobile so storage will be the issue. what is the solutions to this?
+
+also as im seeint the training as it happes and logs in terminals it only promote to knight, bishop, rook. 
+i ahve not seen queen promotion untill now at 400 episodes . even at 600 episodes.  Also Evaluation vs Random: 11.0% win rate (11W-81D-8L).
+even at 800 no promotion to queen also Evaluation vs Random: 5.0% win rate (5W-88D-7L) from 11
+also data storage increased ti 500MB
+is it traeting the promotion as necessary to win the game ? 1000 episodes
+
+
+also while playing as black i cant move any pice after ai does its first move. 
+
+
+
+new}  default draw?
+
+where is promotion msg?
+what is decreased difficulty?
+
+
+
+also i what implanning is the ai to self evolve even after the traing it does. like if it found new moves from a human oppnents if it playes against it learns also learns to counter it. 
+Also i want ti be trained comprehensively in most of the playes and learn from most of the GM. reach the superhuman ratings. i want it to be strongest AI to beat for any human players.
