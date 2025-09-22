@@ -14,6 +14,7 @@ This project combines an **enhanced Deep Q-Network (DQN)** with **residual block
 
 ## 📑 Table of Contents  
 - [Overview](#overview)  
+- [Deep Learning Backbone](#deep-learning-backbone)  
 - [Features](#features)  
 - [Project Structure](#project-structure)  
 - [Getting Started](#getting-started)  
@@ -23,6 +24,7 @@ This project combines an **enhanced Deep Q-Network (DQN)** with **residual block
 - [Data & Configuration](#data--configuration)  
 - [Diagnostics & QA](#diagnostics--qa)  
 - [Command Reference](#command-reference)  
+- [Next Steps](#next-steps)  
 - [License](#license)  
 
 ---
@@ -32,6 +34,16 @@ The trainer bootstraps everything in one place: configuration, monitoring, model
 - **Hardware-aware config** prepares data directories, estimates runtime, and adjusts batch sizes automatically.  
 - **Continuous resource tracking** prevents crashes by monitoring RAM, GPU, and disk.  
 - **Safe checkpointing** ensures long runs survive interruptions, with stale files purged automatically.  
+
+---
+
+## 🧠 Deep Learning Backbone  
+At the core, this project is a **deep reinforcement learning system** powered by **Deep Q-Networks (DQN)** and extended with:  
+- **Residual blocks** for stable deep architectures.  
+- **Multi-head attention** to capture global chessboard context.  
+- **Joint policy & value heads** to balance move selection with long-term game outcomes.  
+
+This deep learning foundation allows the agent to not only approximate raw move values but also to generalize across diverse game states and playstyles.  
 
 ---
 
@@ -147,6 +159,14 @@ python comprehensive_test.py                # Full-system test
 
 ---
 
+## 🔮 Next Steps  
+Planned improvements and research directions include:  
+- **NNUE Integration**: Training and deploying a Stockfish-inspired NNUE engine to combine evaluation precision with reinforcement learning exploration.  
+- **Multi-playstyle Models**: Creating specialized agents (aggressive, defensive, positional) and allowing users to select opponent style.  
+- **Cloud Training Pipelines**: Scaling experiments to distributed environments for faster convergence.  
+- **Hybrid Evaluation**: Merging policy/value heads with NNUE nets for a best-of-both-worlds engine.  
+
+---
+
 ## 📄 License  
 MIT License – free to use, modify, and share with attribution.  
-
