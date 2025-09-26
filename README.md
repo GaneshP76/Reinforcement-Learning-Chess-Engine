@@ -1,4 +1,4 @@
-# ♟️ Reinforcement Learning Chess Engine 
+# ♟️ Reinforcement Learning Chess Engine (In DEV)
 
 A next-generation reinforcement learning system that learns to play chess through self-play.  
 This project combines an **enhanced Deep Q-Network (DQN)** with **residual blocks, multi-head attention, and joint policy/value heads**, wrapped in a resource-aware training workflow, Tkinter GUI, and advanced pipelines for master-game fine-tuning and NNUE experimentation.  
